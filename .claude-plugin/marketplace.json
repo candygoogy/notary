@@ -1,0 +1,21 @@
+{
+  "name": "notary",
+  "owner": {
+    "name": "Notary contributors"
+  },
+  "metadata": {
+    "description": "Trust, but verify Claude: a suite of Claude Code mods."
+  },
+  "plugins": [
+    {
+      "name": "receipts",
+      "source": "./plugins/receipts",
+      "description": "Claude says the tests pass. Receipts checks."
+    },
+    {
+      "name": "changes",
+      "source": "./plugins/changes",
+      "description": "See what Claude changed, turn by turn. Keep it or send it back."
+    }
+  ]
+}

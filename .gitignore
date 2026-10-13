@@ -1,0 +1,6 @@
+node_modules/
+.claude-plugin/types/
+**/.claude-plugin/types/
+.worktrees/
+*.log
+tools/probe/probe-out.log

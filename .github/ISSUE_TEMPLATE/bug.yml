@@ -1,0 +1,45 @@
+name: Bug report
+description: A wrong verdict, a bad revert, noise, or anything that broke.
+body:
+  - type: dropdown
+    id: mod
+    attributes:
+      label: Which mod
+      options: [Changes, Receipts, Both]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: |
+        Receipts: the band or stamp text, the sentence it judged, and the command output.
+        Changes: the pane's note, and what the file looked like before and after (line endings and BOM matter).
+        Please remove anything private (paths, names, code) before posting.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Claude Code version
+      description: From `claude --version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options: [Windows, macOS, Linux]
+    validations:
+      required: true
+  - type: input
+    id: shell
+    attributes:
+      label: Shell, if it matters
+      description: For example PowerShell 7, Git Bash, zsh.

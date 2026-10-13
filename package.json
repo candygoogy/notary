@@ -1,0 +1,22 @@
+{
+  "name": "notary",
+  "private": true,
+  "type": "module",
+  "description": "Trust, but verify Claude: a suite of Claude Code mods.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "sync": "node scripts/sync-shared.mjs",
+    "test:unit": "node --test \"test/**/*.test.ts\"",
+    "test:mods": "claude plugin test plugins/receipts && claude plugin test plugins/changes",
+    "validate": "claude plugin validate . && claude plugin validate plugins/receipts && claude plugin validate plugins/changes",
+    "check": "node scripts/sync-shared.mjs --check && npm run test:unit && npm run validate",
+    "replay": "node tools/replay/replay.ts",
+    "smoke": "node tools/smoke/smoke.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2"
+  }
+}

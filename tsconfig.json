@@ -1,0 +1,18 @@
+{
+  // Editor types for the Node side of the repo: the unit tests, the replay
+  // gate and the scripts. The mods themselves are checked by
+  // `claude plugin validate`.
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["test/receipts/**/*.ts", "test/shared/**/*.ts", "tools/replay/**/*.ts"]
+}

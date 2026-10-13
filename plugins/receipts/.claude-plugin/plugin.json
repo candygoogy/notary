@@ -1,0 +1,18 @@
+{
+  "name": "receipts",
+  "version": "0.1.0",
+  "description": "Claude says the tests pass. Receipts checks. Flags success claims that no check backs up.",
+  "author": { "name": "Notary contributors" },
+  "license": "MIT",
+  "homepage": "https://github.com/candygoogy/notary/tree/main/plugins/receipts",
+  "repository": "https://github.com/candygoogy/notary",
+  "keywords": ["claude-code-mod", "verification", "notary"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "mode": { "type": "string", "title": "Mode", "description": "A: warn only. B: warn, nudge, and send Claude back once on a contradicted claim. C: send back on any unbacked claim.", "options": ["A", "B", "C"], "default": "B" },
+    "smartCheck": { "type": "boolean", "title": "Smart check", "description": "Ask a model about sentences the phrase rules can't settle. Uses your usage. Off by default.", "default": false },
+    "stamp": { "type": "boolean", "title": "Stamp line", "description": "Add a receipt line under each judged answer.", "default": true },
+    "enabled": { "type": "boolean", "title": "Enabled", "description": "Turn Receipts on or off.", "default": true },
+    "verbosity": { "type": "string", "title": "Verbosity", "description": "quiet: flag contradictions, and tests or build claims left unchecked after this turn's edits; the rest goes to the /receipts pane. all: show and stamp every verdict.", "options": ["quiet", "all"], "default": "quiet" }
+  }
+}

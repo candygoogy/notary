@@ -1,0 +1,2067 @@
+[
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && python - <<'EOF'\nimport io\ndef edit(p, pairs):\n    s=io.open(p,encoding='utf-8').read()\n    for a,b in pairs:\n        assert a in s, (p,a); s=s.replace(a,b,1)\n    io.open(p,'w',encoding='utf-8',newline='\\n').write(s)\nedit('src/i18n/en.ts',[(\"  'setup.jump': 'Jump to',\\n\",\"  'setup.intro': 'This is what I use, mostly for work and games. I love Noctua as a brand, so you’ll find it in quite a few places.',\\n  'setup.jump': 'Jump to',\\n\")])\nedit('src/i18n/ca.ts',[(\"  'setup.jump': {\",\"\"\"  'setup.intro': {\n    text: 'Això és el que faig servir, sobretot per treballar i per jugar. M’encanta Noctua com a marca, així que la trobaràs en uns quants llocs.',\n    status: 'reviewed',\n    note: 'Setup intro, under the title (owner interview, 2026-10-05). \"la trobaràs\": \"la\" is the brand (la marca). \"per treballar i per jugar\": for work and games.',\n  },\n  'setup.jump': {\"\"\")])\nedit('src/lib/setup.ts',[\n(\"    { label: 'case', items: ['ASUS ProArt PA602 Wood Edition'] },\",\n\"\"\"    {\n      label: 'case',\n      items: ['ASUS ProArt PA602 Wood Edition'],\n      note: {\n        en: 'Picked to match the Noctua parts, and I like how it looks.',\n        ca: 'Triada perquè fa joc amb les peces de Noctua, i m’agrada com queda.',\n      },\n    },\"\"\"),\n(\"    { label: 'gpu', items: ['AMD Radeon RX 6900 XT'] },\",\n\"\"\"    {\n      label: 'gpu',\n      items: ['AMD Radeon RX 6900 XT'],\n      note: { en: 'I plan to upgrade it at some point.', ca: 'Tinc pensat canviar-la algun dia.' },\n    },\"\"\"),\n(\"    { label: 'displays', items: ['Samsung Odyssey OLED G8 (G80SH)', 'Lenovo Legion Y27q-20'] },\",\n\"\"\"    {\n      label: 'displays',\n      items: ['Samsung Odyssey OLED G8 (G80SH)', 'Lenovo Legion Y27q-20'],\n      note: { en: 'The OLED is the endgame monitor I wanted.', ca: 'L’OLED és el monitor definitiu que volia.' },\n    },\"\"\"),\n])\nedit('src/components/pages/Setup.astro',[(\"    {filled.length === 0 && <PlaceholderSlot lang={lang} />}\",\"    {/* Written with the owner (2026-10-05). */}\\n    <p class=\\\"text-text\\\">{t(lang, 'setup.intro')}</p>\\n    {filled.length === 0 && <PlaceholderSlot lang={lang} />}\")])\nEOF\npnpm exec prettier --write src/lib/setup.ts src/i18n src/components/pages/Setup.astro >/dev/null && pnpm i18n:review >/dev/null && pnpm exec vitest run 2>&1 | tail -4",
+      "isError": false,
+      "text": "$ node scripts/i18n-review.mjs\n      Tests  242 passed (242)\n   Start at  04:46:33\n   Duration  1.96s (import 56%, transform 31%, tests 10%, worker 2%)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "python heredoc edit, then vitest: 242 passed",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && python - <<'PYEOF'\nimport io\ndef edit(p, pairs):\n    s=io.open(p,encoding='utf-8').read()\n    for a,b in pairs:\n        assert a in s, (p,a)\n        s=s.replace(a,b)\n    io.open(p,'w',encoding='utf-8',newline='\\n').write(s)\nW='&from=waiting#waiting'\nedit('src/lib/comments/comments.test.ts', [\n (\"toBe('/admin/?done=approve');\", \"toBe('/admin/?done=approve%s');\" % W),\n (\"\"\"    expect((await moderate(db, { id: '1', action: 'approve', csrf: 'nope' })).status).toBe(403);\n    const other = { email: 'someone@example.com', sub: 'user-2' };\n    expect((await moderate(db, { id: '1', action: 'approve', csrf }, other)).status).toBe(403);\"\"\",\n  \"\"\"    // A stale or foreign token: nothing happens, and the page says to try again.\n    const expired = '/admin/?expired=1%s';\n    const stale = await moderate(db, { id: '1', action: 'approve', csrf: 'nope' });\n    expect([stale.status, stale.headers.get('location')]).toEqual([303, expired]);\n    const other = { email: 'someone@example.com', sub: 'user-2' };\n    const foreign = await moderate(db, { id: '1', action: 'approve', csrf }, other);\n    expect([foreign.status, foreign.headers.get('location')]).toEqual([303, expired]);\"\"\" % W),\n (\"expect(response.headers.get('location')).toBe('/admin/?done=reply');\", \"expect(response.headers.get('location')).toBe('/admin/?done=reply%s');\" % W),\n (\"\"\"      '/admin/?done=reply',\n    );\"\"\", \"\"\"      '/admin/?done=reply-removed%s',\n    );\"\"\" % W),\n (\"toBe('/admin/?missing=reply');\", \"toBe('/admin/?missing=reply%s');\" % W),\n (\"\"\"    expect((await reply({ id: '1', reply: 'hi', csrf: 'nope' })).status).toBe(403);\n    expect(\n      (await reply({ id: '1', reply: 'hi' }, { email: 'someone@example.com', sub: 'user-2' })).status,\n    ).toBe(403);\"\"\", \"\"\"    expect((await reply({ id: '1', reply: 'hi', csrf: 'nope' })).headers.get('location')).toBe(\n      '/admin/?expired=1%s',\n    );\n    expect(\n      (await reply({ id: '1', reply: 'hi' }, { email: 'someone@example.com', sub: 'user-2' })).status,\n    ).toBe(303);\"\"\" % W),\n])\nedit('src/lib/songs/songs.test.ts', [\n (\"it('approves, then serves the pick publicly; back to the Songs part of /admin/'\", \"it('approves, then serves the pick publicly; back to where it was on /admin/'\"),\n (\"'/admin/?done=song-approve#songs'\", \"'/admin/?done=song-approve%s'\" % W),\n (\"'/admin/?done=song-reject#songs'\", \"'/admin/?done=song-reject%s'\" % W),\n (\"'/admin/?done=song-delete#songs'\", \"'/admin/?done=song-delete%s'\" % W),\n (\"'/admin/?missing=song-delete#songs'\", \"'/admin/?missing=song-delete%s'\" % W),\n (\"\"\"    expect((await moderate({ id: '1', action: 'approve', csrf: 'nope' })).status).toBe(403);\n    expect(\n      (await moderate({ id: '1', action: 'approve' }, { email: 'someone@example.com', sub: 'user-2' }))\n        .status,\n    ).toBe(403);\"\"\", \"\"\"    // A stale or foreign token: nothing happens, and the page says to try again.\n    expect(\n      (await moderate({ id: '1', action: 'approve', csrf: 'nope' })).headers.get('location'),\n    ).toBe('/admin/?expired=1%s');\n    expect(\n      (await moderate({ id: '1', action: 'approve' }, { email: 'someone@example.com', sub: 'user-2' }))\n        .status,\n    ).toBe(303);\n    expect((await listForReview(db, 10))[0]?.status).toBe('pending');\"\"\" % W),\n])\nN='&from=notes#notes'\np='src/lib/notes/notes.test.ts'\ns=io.open(p,encoding='utf-8').read()\ns=s.replace(\"?done=note-create#notes'\", \"?done=note-create%s'\" % N).replace(\"?done=note-delete#notes'\", \"?done=note-delete%s'\" % N).replace(\"?missing=note-delete#notes'\", \"?missing=note-delete%s'\" % N)\na=\"\"\"    expect((await manage({ ...post, csrf: 'nope' })).status).toBe(403);\n    expect((await manage(post, { email: 'someone@example.com', sub: 'user-2' })).status).toBe(403);\"\"\"\nassert a in s\ns=s.replace(a,\"\"\"    // A stale or foreign token: nothing happens, and the page says to try again.\n    expect((await manage({ ...post, csrf: 'nope' })).headers.get('location')).toBe(\n      '/admin/?expired=1%s',\n    );\n    expect((await manage(post, { email: 'someone@example.com', sub: 'user-2' })).status).toBe(303);\"\"\" % N)\na=\"\"\"    expect((await manage({ action: 'delete', id: '1', csrf: 'nope' })).status).toBe(403);\"\"\"\nassert a in s\ns=s.replace(a,\"\"\"    expect((await manage({ action: 'delete', id: '1', csrf: 'nope' })).status).toBe(303);\"\"\")\nio.open(p,'w',encoding='utf-8',newline='\\n').write(s)\nPYEOF\ngrep -n \"it('archive\\|from: 'archive'\" src/lib/comments/comments.test.ts | head -3; pnpm vitest run src/lib 2>&1 | grep -E \"✓|✗|×|FAIL|Tests \" | tail -15",
+      "isError": false,
+      "text": "      Tests  231 passed (231)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "python heredoc edit, then vitest: 231 passed",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"C:/Users/dev/Documents/code/shop\" && node node_modules/typescript/bin/tsc -p tsconfig.app.json --noEmit && node node_modules/eslint/bin/eslint.js src scripts && node node_modules/vitest/vitest.mjs run 2>&1 | grep -E \"Tests|Test Files\" && node scripts/optimize-images.mjs | tail -2 && P=.cache/preview && node node_modules/vite/bin/vite.js build --outDir $P/dist --emptyOutDir --logLevel warn && node node_modules/vite/bin/vite.js build --ssr src/entry-server.tsx --outDir $P/dist-ssr --logLevel warn && PRERENDER_OUT=$P node scripts/prerender.mjs | tail -1 && CH=$(find \"$LOCALAPPDATA/ms-playwright/chromium_headless_shell-1246\" -name chrome-headless-shell.exe | head -1) && export REPO=\"$(pwd)\" OUT=\"$TEMP/de-critique/V/r4\" CHROME=\"$CH\" && mkdir -p \"$OUT\" && node \"$TEMP/de-critique/V/shoot.cjs\" | grep -c '\"logs\": \\[\\]' && node node_modules/@playwright/test/cli.js test -c .cache/pw.preview.config.mjs 2>&1 | tail -1 && cp \"$OUT\"/desktop-home-full.png .impeccable/review/desktop.png && cp \"$OUT\"/mobile-home-full.png .impeccable/review/mobile.png && cp \"$OUT\"/desktop-product-full.png \"$OUT\"/mobile-product-full.png \"$OUT\"/desktop-home-fold.png \"$OUT\"/mobile-home-fold.png \"$OUT\"/desktop-about-full.png .impeccable/review/ && cp \"$OUT\"/mobile-about-fold.png .impeccable/review/ && echo DONE",
+      "isError": false,
+      "text": "\u001b[2m Test Files \u001b[22m \u001b[1m\u001b[32m4 passed\u001b[39m\u001b[22m\u001b[90m (4)\u001b[39m\n\u001b[2m      Tests \u001b[22m \u001b[1m\u001b[32m13 passed\u001b[39m\u001b[22m\u001b[90m (13)\u001b[39m\n  icon-512.png (512x512, from favicon.svg)\nDone.\nWrote dist/sitemap.xml (12 URLs)\n8\n  9 passed (9.5s)\nDONE",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "tsc && eslint && vitest with ANSI-colored \"4 passed\"",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app\" && npm run build -w @app/web > \"$TEMP/app-build.log\" 2>&1; npx vitest run apps/web 2>&1 | grep -E \"^ +×|Tests \"",
+      "isError": false,
+      "text": "      Tests  232 passed (232)\nShell cwd was reset to C:\\Users\\dev\\Documents\\code\\app",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "build to a log; then vitest | grep: 232 passed",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app/apps/web\" && npx vitest run test/cuts.test.ts 2>&1 | grep -E \"×|Tests |Assert\" | head",
+      "isError": false,
+      "text": "      Tests  9 passed (9)\nShell cwd was reset to C:\\Users\\dev\\Documents\\code\\app",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "npx vitest run one file | grep: 9 passed",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app\" && sed -i 's/startup(14)/startup(18)/g; s/\"14 apps start with Windows, which can slow down startup.\"/\"18 apps start with Windows, which can slow down startup.\"/' packages/receipt-ui/test/model.test.ts && sed -i 's/14 startup apps/18 startup apps/' docs/superpowers/plans/2026-10-07-phase2b-receipt-ui.md && echo \"Task 2: Ruling: test fixtures use 18 startup apps, not 14 — the verdict warns above STARTUP_ITEMS_KEEP_AN_EYE=15; plan's value was below the threshold (plan Task 5 updated too) — cost if wrong: none\" >> .superpowers/sdd/2026-10-07-phase2b-receipt-ui/progress.md && cd packages/receipt-ui && npx vitest run 2>&1 | grep -E \"×|Expected|Received|Test Files|Tests \" | head; npx tsc -p . && echo TSC OK",
+      "isError": false,
+      "text": " Test Files  4 passed (4)\n      Tests  31 passed (31)\nnpm notice run npx\nnpm notice run tsc -p .\nTSC OK",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "sed edits && vitest: 31 passed, then tsc OK",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && pnpm test 2>&1 | grep -E \"Tests \"; pnpm check:csp 2>&1 | tail -1 | cut -c1-40; pnpm test:e2e 2>&1 | grep -E \"passed|failed|skipped\"",
+      "isError": false,
+      "text": "      Tests  202 passed (202)\nCSP check passed: 20 pages, inline scrip\n  1 skipped\n  31 passed (10.4s)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "; chain: pnpm test, csp check, e2e: all passed, 1 skipped",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app\" && npm test > target/test-run.log 2>&1; echo exit=$?; grep -E \"Tests \" target/test-run.log | awk '{p+=$2} END {print \"ts passed\",p}'; grep -E \"error TS|FAIL|×|ERROR\" target/test-run.log | head -8",
+      "isError": false,
+      "text": "exit=0\nts passed 758\nShell cwd was reset to C:\\Users\\dev\\Documents\\code\\app",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "npm test > log; echo exit=$? prints exit=0",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app\" && ~/.cargo/bin/cargo test -q --workspace --no-fail-fast 2>&1 | grep -E \"^test result|panicked\" | awk '/panicked/{print} /test result/{p+=$4; f+=$6} END {print \"rust passed\", p, \"failed\", f}'; npm test > target/all-test.log 2>&1; echo \"npm exit $?\"; grep -E \"Tests +[0-9]|ℹ (pass|fail)|×\" target/all-test.log | tr -s ' ' | tr '\\n' ' '",
+      "isError": false,
+      "text": "rust passed 268 failed 0\nnpm exit 0\n Tests 25 passed (25)  Tests 52 passed (52)  Tests 15 passed (15)  Tests 12 passed (12)  Tests 454 passed (454) ℹ pass 44 ℹ fail 0  Tests 108 passed (108)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "cargo test via awk prints \"failed 0\" and node \"ℹ fail 0\": zero failures are not failures",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app\" && python - <<'PYEOF'\np = r\"crates/app-collect/src/map.rs\"\ns = open(p, encoding=\"utf-8\").read()\nold = \"\"\"            form_factor: u64_of(m, \"FormFactor\").map(|f| match f {\n                8 => FormFactor::Dimm,\n                12 => FormFactor::Sodimm,\n                _ => FormFactor::Other,\n            }),\"\"\"\nassert old in s\ns = s.replace(old, \"\"\"            // 0 is \"Unknown\" (some laptops report it for their SO-DIMMs): not known, not \"other\".\n            form_factor: u64_of(m, \"FormFactor\").filter(|f| *f != 0).map(|f| match f {\n                8 => FormFactor::Dimm,\n                12 => FormFactor::Sodimm,\n                _ => FormFactor::Other,\n            }),\"\"\")\nopen(p, \"w\", encoding=\"utf-8\", newline=\"\").write(s)\np = r\"packages/verdicts/test/fixtures/from-spike.mjs\"\ns = open(p, encoding=\"utf-8\").read()\nold = \"\"\"      form_factor: m.FormFactor == null ? undefined : FORM_FACTOR[m.FormFactor] ?? \"other\",\"\"\"\nassert old in s\ns = s.replace(old, \"\"\"      // 0 is \"Unknown\" (some laptops report it for their SO-DIMMs): not known, not \"other\".\n      form_factor: !m.FormFactor ? undefined : FORM_FACTOR[m.FormFactor] ?? \"other\",\"\"\")\nopen(p, \"w\", encoding=\"utf-8\", newline=\"\").write(s)\nprint(\"ok\")\nPYEOF\nnode packages/verdicts/test/fixtures/collect-fixtures.mjs && git status --short && ~/.cargo/bin/cargo test -q -p app-collect 2>&1 | grep -E \"test result|panicked\" | head -4 && npm test -w @app/verdicts 2>&1 | grep -E \"Tests |error\"",
+      "isError": false,
+      "text": "ok\r\nwrote C:\\Users\\dev\\Documents\\code\\app\\crates\\app-collect\\tests\\fixtures\n M crates/app-collect/src/map.rs\n M crates/app-facts/src/redact.rs\n M packages/verdicts/test/fixtures/from-spike.mjs\n M spike/kit/run-app-test.bat\n M spike/src/main.rs\n M spike/src/redact.rs\n?? apps/desktop/\n?? crates/app-collect/examples/\ntest result: ok. 36 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.26s\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n      Tests  97 passed (97)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "two npm workspace test runs | grep: both passed",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && node -e \"\nconst fs=require('fs');const p='docs/DECISIONS.md';let s=fs.readFileSync(p,'utf8');\nconst a='\\\"like someone peeking\\\"; design critique, a design review and a design check)';\nif(s.split(a).length!==2) throw 'nf'; s=s.replace(a,'\\\"like someone peeking\\\"; design critique and check)'); fs.writeFileSync(p,s);console.log('ok')\" && pnpm exec prettier --check docs/DECISIONS.md 2>&1 | tail -1 && pnpm vitest run src/lib/no-tool-notes.test.ts 2>&1 | grep -E \"Tests|passed|failed\"",
+      "isError": false,
+      "text": "ok\nAll matched files use Prettier code style!\n Test Files  1 passed (1)\n      Tests  2 passed (2)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "vitest | grep and astro check: \"2 passed\", \"- 0 errors\"",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/bot/public\" && venv/Scripts/ruff format -q . ; venv/Scripts/ruff check . && venv/Scripts/ruff format --check . && venv/Scripts/basedpyright | tail -1 && venv/Scripts/python -m pytest -q 2>&1 | tail -1",
+      "isError": false,
+      "text": "All checks passed!\n48 files already formatted\n0 errors, 0 warnings, 0 notes\n882 passed, 9 skipped in 8.06s",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "ruff && basedpyright && pytest -q: \"882 passed, 9 skipped\"",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$t = Get-Content tests\\test_bot.py -Raw\nforeach ($n in 'test_shutdown_success','test_shutdown_failure','test_timeout_gets_a_clear_reply','test_sleep_timeout_means_it_went_to_sleep','test_sleep_failure') { $t = $t.Replace(\"def $n(fake_run: FakeRun) -> None:\", \"def $n(workstation_on: FakeRun) -> None:`n    fake_run = workstation_on\") }\n$t = $t.Replace(\"@pytest.mark.usefixtures(`\"fake_run`\")`ndef test_sleep_early_return\", \"@pytest.mark.usefixtures(`\"workstation_on`\")`ndef test_sleep_early_return\")\n$t = $t.Replace(@'\n# --- authorization\n'@, @'\n@pytest.fixture\ndef workstation_on(fake_run: FakeRun) -> FakeRun:\n    fake_run.results[\"ping\"] = bot.RunResult(0)\n    fake_run.port22_open = True\n    return fake_run\n\n\n# --- authorization\n'@)\n$t += @'\n\n\n# --- unreachable guard for /shutdown and /sleep ------------------------------\n\n\n@pytest.mark.parametrize(\"name\", [\"shutdown\", \"sleep\"])\ndef test_skips_ssh_when_unreachable(fake_run: FakeRun, name: str) -> None:\n    update = make_update()\n    call(bot.COMMANDS[name], update)\n    assert \"ssh\" not in fake_run.programs()\n    assert replies(update) == [\"Workstation is unreachable: already asleep or off. Nothing sent.\"]\n\n\n@pytest.mark.parametrize(\"name\", [\"shutdown\", \"sleep\"])\ndef test_reports_closed_ssh_port(fake_run: FakeRun, name: str) -> None:\n    fake_run.results[\"ping\"] = bot.RunResult(0)\n    update = make_update()\n    call(bot.COMMANDS[name], update)\n    assert \"ssh\" not in fake_run.programs()\n    assert \"port 22) is closed\" in replies(update)[0]\n\n\n@pytest.mark.parametrize(\"name\", [\"shutdown\", \"sleep\"])\ndef test_ssh_attempted_when_only_port_answers(fake_run: FakeRun, name: str) -> None:\n    fake_run.port22_open = True  # ping blocked by firewall, sshd up\n    call(bot.COMMANDS[name], make_update())\n    assert \"ssh\" in fake_run.programs()\n'@\n[IO.File]::WriteAllText(\"$PWD\\tests\\test_bot.py\", $t)\n.\\venv\\Scripts\\ruff.exe check --fix -q .; .\\venv\\Scripts\\ruff.exe format -q .; .\\venv\\Scripts\\ruff.exe check .; .\\venv\\Scripts\\basedpyright.exe 2>&1 | Select-Object -Last 6; .\\venv\\Scripts\\python.exe -m pytest -q 2>&1 | Select-Object -Last 15",
+      "isError": false,
+      "text": "All checks passed!\n0 errors, 0 warnings, 0 notes\r\n................................................                         [100%]\r\n48 passed in 0.58s",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "PowerShell: edit, ruff, basedpyright, pytest: 48 passed (dot progress)",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": ".\\venv\\Scripts\\ruff.exe check --fix -q .; .\\venv\\Scripts\\ruff.exe format -q .; .\\venv\\Scripts\\ruff.exe check .; .\\venv\\Scripts\\basedpyright.exe 2>&1 | Select-Object -Last 4; .\\venv\\Scripts\\python.exe -m pytest -q 2>&1 | Select-Object -Last 3",
+      "isError": false,
+      "text": "All checks passed!\n0 errors, 0 warnings, 0 notes\r\n........................................................................ [ 77%]\r\n.......................................................sssssssss         [100%]\r\n271 passed, 9 skipped in 1.95s",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "PowerShell ; chain ending pytest | Select-Object -Last 3: 271 passed, 9 skipped",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "Remove-Item -Recurse -Force .uv-cache -ErrorAction SilentlyContinue; $p='requirements-dev.in'; [IO.File]::WriteAllText($p, ([IO.File]::ReadAllText($p) -replace \"`r`n\", \"`n\")); git add -A; git status --short; .\\venv\\Scripts\\pytest -q 2>&1 | Select-Object -Last 1; .\\venv\\Scripts\\basedpyright 2>&1 | Select-Object -Last 1",
+      "isError": false,
+      "text": "A  .github/workflows/audit.yml\nM  README.md\nM  requirements-dev.in\nM  requirements-dev.txt\n329 passed, 9 skipped in 2.23s\r\n0 errors, 0 warnings, 0 notes",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "PowerShell: git add, pytest | Select-Object -Last 1: 329 passed",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": ". \"C:\\Users\\dev\\Desktop\\work\\tools\\env-dotnet.ps1\"; Import-Module ./build.psm1 -Force; $r=\"C:\\Users\\dev\\Desktop\\work\\PowerShell-fix-a-repro\"; Start-PSPester -Path test/powershell/engine/Module *>&1 | Out-File \"$r\\pester-module-folder-after.txt\"; Select-String -Path \"$r\\pester-module-folder-after.txt\" -Pattern '\\[-\\]|Tests Passed' | % Line",
+      "isError": false,
+      "text": "Tests Passed: 120, Failed: 0, Skipped: 6, Pending: 0, Inconclusive: 0",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "PowerShell Start-PSPester (the PowerShell repo wrapper over Pester): \"Tests Passed: 120, Failed: 0\"",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app\" && ~/.claude/skills/executing-plans/scripts/task-start docs/superpowers/plans/2026-10-07-phase5-website.md 6 | tail -1 && cat > apps/web/test/motion.test.ts <<'EOF'\nimport { readFileSync } from \"node:fs\";\nimport { describe, expect, it } from \"vitest\";\n\nconst read = (rel: string) => readFileSync(new URL(rel, import.meta.url), \"utf8\").replace(/\\/\\*[\\s\\S]*?\\*\\//g, \"\");\nconst site = read(\"../src/styles/site.css\");\nconst share = read(\"../src/share/share.css\");\nconst receipt = read(\"../../../packages/receipt-ui/src/receipt.css\");\n\n/** The bodies of every @keyframes block. */\nconst keyframes = (css: string) => [...css.matchAll(/@keyframes\\s+[\\w-]+\\s*\\{((?:[^{}]*\\{[^{}]*\\})*)\\s*\\}/g)].map(([, body]) => body!);\n\n/** Text inside every `prefers-reduced-motion: reduce` block. */\nfunction reducedBlocks(css: string): string {\n  let out = \"\";\n  for (const m of css.matchAll(/@media\\s*\\(prefers-reduced-motion:\\s*reduce\\)\\s*\\{/g)) {\n    let depth = 1;\n    let i = m.index! + m[0].length;\n    const start = i;\n    while (depth > 0 && i < css.length) {\n      if (css[i] === \"{\") depth++;\n      else if (css[i] === \"}\") depth--;\n      i++;\n    }\n    out += css.slice(start, i - 1);\n  }\n  return out;\n}\n\n/** Selectors of top-level rules that declare an animation (not \"none\"). */\nfunction animated(css: string): string[] {\n  const outside = css.replace(/@media[^{]*\\{(?:[^{}]*\\{[^{}]*\\})*\\s*\\}/g, \"\").replace(/@keyframes[^{]*\\{(?:[^{}]*\\{[^{}]*\\})*\\s*\\}/g, \"\");\n  return [...outside.matchAll(/([^{}]+)\\{([^{}]*)\\}/g)]\n    .filter(([, , body]) => /(^|;|\\s)animation(-name)?\\s*:\\s*(?!none)/.test(body!))\n    .map(([, sel]) => sel!.trim());\n}\n\ndescribe(\"motion\", () => {\n  it(\"animates only transform and opacity\", () => {\n    for (const body of [...keyframes(site), ...keyframes(receipt), ...keyframes(share)]) {\n      const props = [...body.matchAll(/([a-z-]+)\\s*:/g)].map(([, p]) => p);\n      expect(props.filter((p) => p !== \"transform\" && p !== \"opacity\"), body).toEqual([]);\n    }\n  });\n\n  it(\"has something to animate on the landing page\", () => {\n    expect(keyframes(site).length).toBeGreaterThanOrEqual(2);\n    expect(animated(site).length).toBeGreaterThanOrEqual(2);\n  });\n\n  it(\"switches every animation off for people who ask for less motion\", () => {\n    const reduced = reducedBlocks(site);\n    for (const selector of animated(site)) expect(reduced, selector).toContain(selector);\n  });\n\n  it(\"finishes printing a receipt within about 600 ms, however long it is\", () => {\n    expect(receipt).toMatch(/animation-delay:\\s*min\\(calc\\(var\\(--i, 0\\) \\* 40ms\\), 560ms\\)/);\n  });\n});\nEOF\npython - <<'PYEOF'\np=\"apps/web/test/share/share-page.test.tsx\"\ns=open(p,encoding=\"utf-8\",newline=\"\").read()\na=\"\"\"    expect(container.querySelector(\".app-receipt\")).not.toBeNull();\n    expect(screen.getByText(\"Shared receipt\")).toBeTruthy();\"\"\"\nb=\"\"\"    expect(container.querySelector(\".app-receipt\")).not.toBeNull();\n    // It prints in, line by line (the CSS turns this off for reduced motion).\n    expect(container.querySelector(\".app-receipt[data-printing]\")).not.toBeNull();\n    expect(screen.getByText(\"Shared receipt\")).toBeTruthy();\"\"\"\nassert a in s; s=s.replace(a,b)\nopen(p,\"w\",encoding=\"utf-8\",newline=\"\").write(s)\nPYEOF\ncd apps/web && npx vitest run test/motion.test.ts test/share 2>&1 | grep -E \"Tests |×\" | head -8",
+      "isError": false,
+      "text": "base: 16065987b39ea8946cb80854dbd5094e80926c9b\n     × has something to animate on the landing page 2ms\n     × finishes printing a receipt within about 600 ms, however long it is 1ms\n     × shows the receipt, its expiry and a way home 42ms\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯\n      Tests  3 failed | 28 passed (31)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "masked: heredoc writes a test, vitest | grep shows \"3 failed | 28 passed\", isError false",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && python - <<'EOF'\np='e2e/shell.spec.ts'\ns=open(p,newline='',encoding='utf-8').read()\ncrlf='\\r\\n' in s; s=s.replace('\\r\\n','\\n')\na=\"\"\"    const admin = await page.request.get('/admin/');\n    expect(admin.status()).toBe(403);\"\"\"\nb=\"\"\"    const admin = await page.request.get('/admin/');\n    expect(admin.status()).toBe(403);\n    // Opened in the browser too: navigations skip the Worker unless the path is listed in\n    // run_worker_first (wrangler.jsonc); without it /admin showed the 404 page live.\n    const opened = await page.goto('/admin/');\n    expect(opened?.status()).toBe(403);\n    await expect(page).toHaveTitle(/Comments review/);\"\"\"\nassert a in s; s=s.replace(a,b,1)\nif crlf: s=s.replace('\\n','\\r\\n')\nopen(p,'w',newline='',encoding='utf-8').write(s)\nEOF\npnpm exec prettier --write e2e/shell.spec.ts >/dev/null; pnpm test:e2e 2>&1 | grep -E \"passed|failed|✘|Error:\" | tail -6",
+      "isError": false,
+      "text": "    Error: console errors or CSP violations\n  1 failed\n  35 passed (9.7s)\n[ELIFECYCLE] Command failed with exit code 1.\n[This command modified 1 file you've previously read: e2e\\shell.spec.ts. Call Read before editing.]",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "masked: e2e via pnpm prints \"1 failed\" and ELIFECYCLE, isError false, engine note line at the end",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app/apps/desktop\" && sed -i 's|const css = readFileSync(new URL(\"../src/app.css\", import.meta.url), \"utf8\");|// Tests run from apps/desktop (npm test -w @app/desktop).\\nconst css = readFileSync(join(process.cwd(), \"src/app.css\"), \"utf8\");|; s|import { readFileSync } from \"node:fs\";|import { readFileSync } from \"node:fs\";\\nimport { join } from \"node:path\";|' test/frame.test.tsx && npx vitest run test/frame.test.tsx 2>&1 | grep -E \"×|✓|Tests|Error\" | head",
+      "isError": false,
+      "text": "     × the mat always has the slot, and a Ready light when asked 18ms\n     × Back appears only when a view can go back, with its title 2ms\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯\nTypeError: Cannot read properties of undefined (reading 'replace')\nTypeError: Cannot read properties of undefined (reading 'replace')\n      Tests  2 failed | 3 passed (5)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "masked: vitest TypeError, \"2 failed | 3 passed\", isError false",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app\" && py -I - <<'EOF'\nimport io\np = \"apps/windows/packaging/test/release.test.mjs\"\ns = io.open(p, encoding=\"utf-8\").read()\nold = '    assert.doesNotMatch(build, /: write/);\\n'\nnew = old + '    // A cache can be filled by another workflow run; the downloads are built from a clean npm ci.\\n    assert.doesNotMatch(build, /cache:/, \"the release build restores no cache\");\\n'\nassert s.count(old) == 1\nio.open(p, \"w\", encoding=\"utf-8\", newline=\"\").write(s.replace(old, new))\nEOF\nnode --test apps/windows/packaging/test/release.test.mjs 2>&1 | grep -E \"✖ release|ℹ fail\"; py -I - <<'EOF'\nimport io\np = \".github/workflows/release.yml\"\ns = io.open(p, encoding=\"utf-8\").read()\nold = \"          node-version: 24\\n          cache: npm\\n\"\nassert s.count(old) == 1\nio.open(p, \"w\", encoding=\"utf-8\", newline=\"\").write(s.replace(old, \"          node-version: 24\\n\"))\nEOF\nnode --test apps/windows/packaging/test/release.test.mjs 2>&1 | grep -E \"ℹ (pass|fail)\"; node --test apps/windows/packaging/test/repo-files.test.mjs 2>&1 | grep -E \"ℹ (pass|fail)\"",
+      "isError": false,
+      "text": "  ✖ release.yml builds with read-only rights and publishes in a separate job (0.6026ms)\nℹ fail 1\n✖ release.yml builds with read-only rights and publishes in a separate job (0.6026ms)\nℹ pass 22\nℹ fail 0\nℹ pass 11\nℹ fail 0",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "masked: node --test prints \"ℹ fail 1\" among later \"ℹ fail 0\" runs",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"C:/Users/dev/Documents/code/app\" && printf '%s\\n' \"//! app for Windows.\" > apps/windows/src/lib.rs && printf '%s\\n' \"fn main() {}\" > apps/windows/src/main.rs && ~/.cargo/bin/cargo test -p app-windows --test ui 2>&1 | grep -E \"^error|cannot find|unresolved\" | head -5",
+      "isError": false,
+      "text": "error[E0432]: unresolved imports `app_windows::Deps`, `app_windows::app`\nerror: could not compile `app-windows` (test \"ui\") due to 1 previous error",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "masked: cargo test cannot compile (error[E0432], could not compile), isError false",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && pnpm vitest run 2>&1 | grep -E \"FAIL|AssertionError|Expected|Received\" | head; grep -n \"needs-review\" src/i18n/ca.ts | head; pnpm lint 2>&1 | grep \"^C:\" ",
+      "isError": false,
+      "text": " FAIL  src/i18n/i18n.test.ts > review sheet > is up to date (run `pnpm i18n:review`)\nAssertionError: expected '# Catalan review sheet\\n\\nGenerated f…' to be '# Catalan review sheet\\n\\nGenerated f…' // Object.is equality\n- Expected\n+ Received\n3:export type ReviewStatus = 'needs-review' | 'reviewed';\n12:// Catalan strings. Every new or changed entry starts as `needs-review`.\nC:\\Users\\dev\\Documents\\code\\web\\.agent\\audit\\fix-home\\measure.mjs\nC:\\Users\\dev\\Documents\\code\\web\\.agent\\audit\\fix-home\\shot.mjs",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "masked: vitest | grep shows \" FAIL  src/...\" and AssertionError",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app/packages/receipt-ui\" && npx vitest run test/markdown.test.ts 2>&1 | grep -E \"✓|×|FAIL|Expected|Received|expected|Tests \" | head -30",
+      "isError": false,
+      "text": "     × opens with the name, the date and the summary in bold 10ms\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n FAIL  test/markdown.test.ts > toMarkdown (copy for Discord or Reddit) > opens with the name, the date and the summary in bold\nAssertionError: expected '**app** · 07/10/2026 14:32' to be '**app** · 7 Oct 2026, 14:32' // Object.is equality\nExpected: \"**app** · 7 Oct 2026, 14:32\"\nReceived: \"**app** · 07/10/2026 14:32\"\n      Tests  1 failed | 5 passed (6)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "masked: vitest | grep, \"1 failed | 5 passed\"",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && pnpm test 2>&1 | grep \"Tests \"; pnpm check:csp 2>&1 | tail -1 | cut -c1-30; pnpm test:e2e 2>&1 | grep -E \"passed|failed|skipped|✘\"; pnpm exec playwright test --project=visual 2>&1 | grep -E \"passed|failed\"; ls test-results 2>/dev/null | grep visual",
+      "isError": false,
+      "text": "      Tests  211 passed (211)\nCSP check passed: 20 pages, in\n  1 failed\n  1 skipped\n  30 passed (8.4s)\n[ELIFECYCLE] Command failed with exit code 1.\n  20 passed (4.8s)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "masked: ; chain, e2e \"1 failed\" and ELIFECYCLE among passes",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'); pnpm exec playwright test --project=chromium e2e/shell.spec.ts -g \"first paint|About and Colophon\" --repeat-each=5 --reporter=line 2>&1 | Select-String -Pattern '^\\s+\\d+ (passed|failed|flaky)|InvalidStateError|Received:' | Select-Object -Last 12",
+      "isError": true,
+      "text": "Exit code 1\n    Received: \"rgba(0, 0, 0, 0)\"\r\n    Received: \"rgba(0, 0, 0, 0)\"\r\n    Received: \"rgba(0, 0, 0, 0)\"\r\n    Received: \"rgba(0, 0, 0, 0)\"\r\n    +   \"InvalidStateError: Transition was aborted because of invalid state. ViewTransition opt-in disabled\",\r\n    +   \"InvalidStateError: Transition was aborted because of invalid state. ViewTransition opt-in disabled\",\r\n    +   \"InvalidStateError: Transition was aborted because of invalid state. ViewTransition opt-in disabled\",\r\n  7 failed\r\n  3 passed (4.3s)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "PowerShell playwright | Select-String, Exit code 1, \"7 failed\"",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "Set-Location \"C:\\Users\\dev\\Documents\\code\\web\"; pnpm build 2>&1 | Select-Object -Last 1; pnpm exec playwright test --project=chromium 2>&1 | Select-Object -Last 12",
+      "isError": true,
+      "text": "Exit code 1\n[ELIFECYCLE] Command failed with exit code -1073740791.\r\n[WebServer] (node:16892) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\r\n[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)\r\nError: Timed out waiting 60000ms from config.webServer.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "PowerShell build ; playwright, Exit code 1, webServer timed out",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "pnpm exec playwright test --project=chromium 2>&1 | Select-Object -Last 3; pnpm exec playwright test --project=visual 2>&1 | Select-String \"  x |passed|failed\" | Select-Object -Last 12",
+      "isError": true,
+      "text": "Exit code 1\n  1 skipped\r\n  53 passed (11.5s)\r\n\r\n  x   3 [visual] › e2e\\visual.spec.ts:49:7 › home light 390 (1.2s)\r\n  x   4 [visual] › e2e\\visual.spec.ts:49:7 › home dark 390 (1.3s)\r\n  x   9 [visual] › e2e\\visual.spec.ts:49:7 › home-ca light 390 (918ms)\r\n  x  11 [visual] › e2e\\visual.spec.ts:49:7 › home-ca dark 390 (960ms)\r\n    Error: expect(page).toHaveScreenshot(expected) failed\r\n    Error: expect(page).toHaveScreenshot(expected) failed\r\n    Error: expect(page).toHaveScreenshot(expected) failed\r\n    Error: expect(page).toHaveScreenshot(expected) failed\r\n  4 failed\r\n  16 passed (5.5s)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "PowerShell two playwright runs: first \"53 passed\", second \"4 failed\", Exit code 1",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "pnpm exec vitest run src/lib/music 2>&1 | Select-Object -Last 15",
+      "isError": true,
+      "text": "Exit code 1\n     35| describe('schemas', () => {\r\n     36|   it('parse the recorded fixtures', () => {\r\n     37|     expect(youtube.activities).toHaveLength(2);\r\n       |                                ^\r\n     38|     expect(spotify.spotify?.song).toBe('Spotify Song');\r\n     39|     expect(offline.discord_status).toBe('offline');\r\n\r\n⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯\r\n\r\n\r\n Test Files  1 failed | 1 passed (2)\r\n      Tests  1 failed | 26 passed (27)\r\n   Start at  23:25:55\r\n   Duration  721ms (import 61%, tests 22%, transform 15%, worker 3%)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "PowerShell vitest | Select-Object, Exit code 1, \"Tests  1 failed | 26 passed\"",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'); pnpm exec vitest run src/lib/music/lyrics.test.ts 2>&1 | Select-String -Pattern \"FAIL|Expected|Received|AssertionError|❯ src\" | Select-Object -First 12",
+      "isError": true,
+      "text": "Exit code 1\n ❯ src/lib/music/lyrics.test.ts (15 tests | 1 failed) 24ms\r\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\r\n FAIL  src/lib/music/lyrics.test.ts > lookupLyrics > asks only LRCLIB, with a User-Agent, and returns the exact match\r\nAssertionError: expected [ …(2) ] to have a length of 1 but got 2\r\n- Expected\r\n+ Received\r\n ❯ src/lib/music/lyrics.test.ts:130:19\r\n Test Files  1 failed (1)\r\n      Tests  1 failed | 14 passed (15)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "PowerShell vitest | Select-String, Exit code 1, FAIL and AssertionError lines",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app/apps/desktop\" && cp src/panels/Numbers.tsx /tmp/Numbers.bak && sed -i '/onKeyDown={move}/d' src/panels/Numbers.tsx && npx vitest run test/panels.test.tsx -t \"arrow keys\" 2>&1 | grep -E \"×|✓|Tests\" | head -3; cp /tmp/Numbers.bak src/panels/Numbers.tsx && grep -c \"onKeyDown={move}\" src/panels/Numbers.tsx && npx vitest run test/panels.test.tsx -t \"arrow keys\" 2>&1 | grep -E \"Tests\"",
+      "isError": false,
+      "text": "     × the number tabs move with the arrow keys, Home and End 121ms\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n      Tests  1 failed | 8 skipped (9)\n1\n      Tests  1 passed | 8 skipped (9)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "mutation check in one command: break the code, \"1 failed\", restore, \"1 passed | 8 skipped\": the last run decides",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app\" && npm run build -w @app/web > target/scratch/build.log 2>&1; echo \"build $?\"; cd apps/web && npx vitest run test/not-found.test.ts 2>&1 | grep -E \"✓|×|Tests \" | head -10",
+      "isError": false,
+      "text": "build 0\n      Tests  no tests\nShell cwd was reset to C:\\Users\\dev\\Documents\\code\\app",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "zero-tests"
+    },
+    "note": "vitest prints \"Tests  no tests\"",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app\" && npm install --silent >/dev/null 2>&1; (cd apps/web && npx vitest run test/not-found.test.ts 2>&1 | grep -E \"Error|×|Tests \" | head -5)",
+      "isError": false,
+      "text": "Error: Failed to resolve import \"../src/scripts/not-found.ts\" from \"test/not-found.test.ts\". Does the file exist?\n      Tests  no tests\nShell cwd was reset to C:\\Users\\dev\\Documents\\code\\app",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "vitest says \"no tests\" because the test file failed to import: a failure, not zero tests",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/bot/public\" && V=venv/Scripts; ($V/python -m pytest -q -p no:cacheprovider 2>&1 | tail -3; $V/ruff check . 2>&1 | tail -1; $V/ruff format --check . 2>&1 | tail -1; $V/basedpyright 2>&1 | tail -1; gitleaks dir --no-banner --redact . 2>&1 | tail -1; gitleaks git --no-banner --redact . 2>&1 | tail -1) > ../.scratch/lead_t10_checks.txt 2>&1; cat ../.scratch/lead_t10_checks.txt",
+      "isError": false,
+      "text": "Command running in background with ID: bc6jp3hsa. Output is being written to: C:\\Users\\DEV~1\\AppData\\Local\\Temp\\claude\\C--Users-dev-project\\cc86dae7-6693-4af8-a7a1-05d528e0a779\\tasks\\bc6jp3hsa.output. You will be notified when it completes. To check interim output, use Read on that file path.\nSession cwd remains C:\\Users\\dev\\Documents\\code\\bot; directory changes made by the backgrounded command do not apply to subsequent commands.",
+      "backgrounded": true
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pending"
+    },
+    "note": "pytest run_in_background: only the background task notice",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app\" && export PATH=\"$HOME/.cargo/bin:$PATH\" && npm test > target/scratch/npm.log 2>&1; echo \"npm exit $?\"; grep -E \"Tests +[0-9]|error TS|FAIL\" target/scratch/npm.log | head -12; ~/.cargo/bin/cargo test --workspace --no-fail-fast > target/scratch/cargo.log 2>&1; grep -E \"^test result\" target/scratch/cargo.log | awk '{p+=$4; f+=$6} END {print \"cargo passed\",p,\"failed\",f}'; grep -E \"\\.\\.\\. FAILED\" target/scratch/cargo.log",
+      "isError": false,
+      "text": "Command running in background with ID: byfjjnnq2. Output is being written to: C:\\Users\\DEV~1\\AppData\\Local\\Temp\\claude\\C--Users-dev-project\\6952ce17-f941-4c9d-9131-3d94a2f1acb7\\tasks\\byfjjnnq2.output. You will be notified when it completes. To check interim output, use Read on that file path.\nSession cwd remains C:\\Users\\dev\\Documents\\code\\app; directory changes made by the backgrounded command do not apply to subsequent commands.",
+      "backgrounded": true
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pending"
+    },
+    "note": "npm test run_in_background",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": ". \"C:\\Users\\dev\\Desktop\\work\\tools\\env-dotnet.ps1\"; Set-Location \"C:\\Users\\dev\\Desktop\\work\\PowerShell-fix-b\"; Import-Module ./build.psm1 -Force; $r=\"C:\\Users\\dev\\Desktop\\work\\PowerShell-fix-b-repro\"; Start-PSPester -Path test/powershell/Host/ConsoleHost.Tests.ps1 -OutputFile \"$r\\win-before-pester.xml\" *> \"$r\\win-before-pester.log\"; \"done\"; Select-String -Path \"$r\\win-before-pester.log\" -Pattern 'Tests completed|Passed:|Failed:|\\[-\\]' | ForEach-Object Line",
+      "isError": false,
+      "text": "Command running in background with ID: bbe5auz3c. Output is being written to: C:\\Users\\DEV~1\\AppData\\Local\\Temp\\claude\\C--Users-dev-project\\4b4369d1-9fbb-45b6-89ab-9d3da17ed71d\\tasks\\bbe5auz3c.output. You will be notified when it completes. To check interim output, use Read on that file path.",
+      "backgrounded": true
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pending"
+    },
+    "note": "PowerShell Start-PSPester run_in_background",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"C:/Users/dev/Documents/code/app/proto/desktop-slint\" && ~/.cargo/bin/cargo build --release > build.log 2>&1; echo \"exit $?\" >> build.log; tail -5 build.log",
+      "isError": false,
+      "text": "Command running in background with ID: b4pv1r4pc. Output is being written to: C:\\Users\\DEV~1\\AppData\\Local\\Temp\\claude\\C--Users-dev-project\\2e017e44-79f5-48b0-afe7-049ef1e44909\\tasks\\b4pv1r4pc.output. You will be notified when it completes. To check interim output, use Read on that file path.\nSession cwd remains C:\\Users\\dev\\Documents\\code\\app; directory changes made by the backgrounded command do not apply to subsequent commands.",
+      "backgrounded": true
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pending"
+    },
+    "note": "cargo build --release run_in_background",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": ". \"C:\\Users\\dev\\Desktop\\work\\tools\\env.ps1\" *> $null; Set-Location \"C:\\Users\\dev\\Desktop\\work\\editor\"; cargo build -p editor *> \"..\\editor-repro\\logs\\12-wheel-build-editor.log\"; \"editor build exit: $LASTEXITCODE\" | Add-Content \"..\\editor-repro\\logs\\12-wheel-build-editor.log\"; cargo build -p cli --features cli *>> \"..\\editor-repro\\logs\\12-wheel-build-editor.log\"; \"cli build exit: $LASTEXITCODE\" | Add-Content \"..\\editor-repro\\logs\\12-wheel-build-editor.log\"",
+      "isError": false,
+      "text": "Command running in background with ID: b3e1ueymg. Output is being written to: C:\\Users\\DEV~1\\AppData\\Local\\Temp\\claude\\C--Users-dev-project\\a9d8fae8-ecd4-4361-9d65-fc286f7bcd97\\tasks\\b3e1ueymg.output. You will be notified when it completes. To check interim output, use Read on that file path.",
+      "backgrounded": true
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pending"
+    },
+    "note": "PowerShell cargo build run_in_background",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'); Get-Process workerd -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; pnpm build 2>&1 | Select-Object -Last 1; \"build: $LASTEXITCODE\"",
+      "isError": false,
+      "text": "13:58:18 [build] Complete!\r\nbuild: 0",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "PowerShell pnpm build | Select-Object -Last 1; \"build: $LASTEXITCODE\" prints 0",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'); Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'site\\.example' -and $_.CommandLine -match 'astro.*preview|workerd' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; pnpm exec prettier --write src/components/LyricSheet.tsx src/components/MusicCard.tsx src/styles/global.css 2>&1 | Out-Null; pnpm build 2>&1 | Select-Object -Last 1",
+      "isError": false,
+      "text": "19:59:11 [build] Complete!",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "PowerShell prettier ; pnpm build | Select-Object -Last 1: \"[build] Complete!\"",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && pnpm exec eslint $(git ls-files 'src/**/*.test.ts' 'src/*.test.ts') src/lib/comments/test-db.ts e2e/*.ts",
+      "isError": true,
+      "text": "Exit code 1\n\nC:\\Users\\dev\\Documents\\code\\web\\src\\lib\\site.test.ts\n  28:9  error  Unnecessary conditional, value is always truthy  @typescript-eslint/no-unnecessary-condition\n\n✖ 1 problem (1 error, 0 warnings)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "fail"
+    },
+    "note": "eslint, Exit code 1, \"✖ 1 problem (1 error, 0 warnings)\"",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && pnpm exec prettier --write src/components/CommentForm.tsx >/dev/null; pnpm exec astro check 2>&1 | grep -E \"errors|warnings|error ts\" | head -5; pnpm exec eslint src/components/CommentForm.tsx",
+      "isError": true,
+      "text": "Exit code 1\n- 0 errors\n- 0 warnings\n\nC:\\Users\\dev\\Documents\\code\\web\\src\\components\\CommentForm.tsx\n  167:48  error  '_cleared' is defined but never used  @typescript-eslint/no-unused-vars\n\n✖ 1 problem (1 error, 0 warnings)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "fail"
+    },
+    "note": "astro check \"- 0 errors\" ; eslint error, Exit code 1",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": ". \"C:\\Users\\dev\\Desktop\\work\\tools\\env.ps1\" *> $null; Set-Location \"C:\\Users\\dev\\Desktop\\work\\editor\"; $env:CARGO_TARGET_DIR = \"C:\\Users\\dev\\Desktop\\work\\editor\\target-linux-check\"; cargo check -p ui_linux --target x86_64-unknown-linux-gnu --features wayland,x11 2>&1 | Tee-Object \"..\\editor-repro\\logs\\10-wheel-linux-check.log\" | Select-String -Pattern \"^(error|warning)|Finished|could not compile|failed to run custom build\" | Select-Object -First 20; \"exit: $LASTEXITCODE\"",
+      "isError": true,
+      "text": "Exit code 101\nwarning: someone@example.com: Compiler family detection failed due to error: ToolNotFound: failed to find tool \r\n\"x86_64-linux-gnu-gcc\": program not found (see https://docs.rs/cc/latest/cc/#compile-time-requirements for help)\r\nwarning: someone@example.com: Compiler family detection failed due to error: ToolNotFound: failed to find tool \r\n\"x86_64-linux-gnu-gcc\": program not found (see https://docs.rs/cc/latest/cc/#compile-time-requirements for help)\r\nerror: failed to run custom build command for `wayland-backend v0.3.15`\r\nwarning: build failed, waiting for other jobs to finish...\r\nexit: 101",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "fail"
+    },
+    "note": "PowerShell cargo check, Exit code 101, \"error: failed to run custom build command\"",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'); $now = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); pnpm exec wrangler d1 execute web-comments --local --command \"INSERT INTO comments (name, message, lang, status, created_at) VALUES ('Waiting note', 'should not show', 'en', 'pending', $now), ('Approved note', 'hola! this one is approved', 'ca', 'approved', $now)\" 2>&1 | Select-String 'executed|error'; \"list: \" + (curl.exe -s http://localhost:4321/api/comments); pnpm exec wrangler d1 execute web-comments --local --command \"DELETE FROM comments\" 2>&1 | Select-String 'executed|error'",
+      "isError": false,
+      "text": "🚣 1 command executed successfully.\r\nlist: {\"entries\":[{\"id\":2,\"name\":\"Approved note\",\"message\":\"hola! this one is approved\",\"website\":null,\"lang\":\"ca\",\"createdAt\":1791121664313}]}\r\n🚣 1 command executed successfully.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "PowerShell curl.exe against localhost API between wrangler d1 commands",
+    "source": "real",
+    "todo": "curl.exe sits inside a PowerShell string expression"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/site\" && grep -rn '\"reveal\\|reveal\"\\| reveal\\b\\|\\.reveal' src --include=*.astro --include=*.css --include=*.svelte | head; npm run build 2>&1 | grep -E \"page\\(s\\) built|rror|warn\" | head; (npx wrangler dev --port 8800 > /tmp/cg/wd8800.log 2>&1 &) ; for i in $(seq 1 40); do c=$(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8800/); [ \"$c\" = 200 ] && break; sleep 1; done; echo \"new :8800 -> $c\"; curl -s -o /dev/null -w \"frozen :8799 -> %{http_code}\\n\" http://127.0.0.1:8799/",
+      "isError": false,
+      "text": "src/styles/motion.css:133:  /* Mask reveal. */\n\u001b[2m16:06:58\u001b[22m \u001b[34m[build]\u001b[39m 3 page(s) built in \u001b[1m868ms\u001b[22m\nnew :8800 -> 200\nfrozen :8799 -> 200",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "wrangler dev & then a curl loop on 127.0.0.1 until 200",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "for i in $(seq 1 20); do curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8799/ | grep -q 200 && break; sleep 2; done; curl -s http://127.0.0.1:8799/ | grep -o '<link rel=\"icon\"[^>]*>\\|Pastry shop site with WhatsApp ordering' | head; curl -s -o /dev/null -w \"favicon %{http_code}\\n\" http://127.0.0.1:8799/favicon.ico; curl -s -w \" presence %{http_code}\\n\" http://127.0.0.1:8799/api/presence",
+      "isError": false,
+      "text": "<link rel=\"icon\" href=\"/favicon.ico?v=fd3ec67c91\" sizes=\"16x16 32x32 48x48\">\nPastry shop site with WhatsApp ordering\nfavicon 200\r\n{\"status\":\"dnd\"} presence 200",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "curl loop on 127.0.0.1:8799, then content checks",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "Resolve-DnsName server.lan -ErrorAction SilentlyContinue | Format-Table -AutoSize; Test-NetConnection server.lan -Port 22 -WarningAction SilentlyContinue | Select-Object ComputerName,RemoteAddress,TcpTestSucceeded; Get-ChildItem $env:USERPROFILE\\.ssh -ErrorAction SilentlyContinue | Select-Object Name; if (Test-Path $env:USERPROFILE\\.ssh\\config) { Get-Content $env:USERPROFILE\\.ssh\\config }",
+      "isError": false,
+      "text": "Name        Type TTL   Section IPAddress\r\n----        ---- ---   ------- ---------\r\nserver.lan A    86400 Answer  192.168.1.10\r\n\r\n\r\nComputerName RemoteAddress TcpTestSucceeded\r\n------------ ------------- ----------------\r\nserver.lan  192.168.1.10              True",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "PowerShell Resolve-DnsName / Test-NetConnection",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$dir = \"$env:TEMP\\claude\"\n$tab = Get-Content \"$dir\\kkp-tab.ps1\" -Raw\n$tab = $tab -replace \"\\`$Host.UI.RawUI.WindowTitle = 'KKPTEST'\\r?\\n\", ''\n$tab = $tab -replace '(\\$t = \\$stdin.ReadAsync\\(\\$buf,0,256\\))', \"`$1`n`$w=[Diagnostics.Stopwatch]::StartNew(); while(`$w.ElapsedMilliseconds -lt 3000 -and -not `$t.Wait(50)){}; if(`$t.IsCompleted){ [void]`$sb.Append([Text.Encoding]::UTF8.GetString(`$buf,0,`$t.Result)); `$t=`$stdin.ReadAsync(`$buf,0,256) }`n`$Host.UI.RawUI.WindowTitle = 'KKPREADY'   # only after the flags are confirmed\"\nSet-Content \"$dir\\kkp-tab.ps1\" $tab\n$drv = Get-Content \"$dir\\kkp-portable.ps1\" -Raw\n$drv = $drv -replace \"'--title','KKPTEST','--suppressApplicationTitle',\", ''\n$drv = $drv -replace \"-eq 'KKPTEST'\", \"-eq 'KKPREADY'\" -replace 'lt 100;', 'lt 200;' -replace 'Start-Sleep -Milliseconds 1500', 'Start-Sleep -Milliseconds 300'\n$drv = $drv -replace '(?s)\"=== TEST A.*$', @'\n\"=== TEST A: fresh Terminal, Kitty protocol ON (default)\";  Remove-Item \"$env:TEMP\\claude\\kkp-tab.log\" -EA SilentlyContinue; RunTest $true;  \"   tab received: $(Get-Content \"$env:TEMP\\claude\\kkp-tab.log\" -EA SilentlyContinue)\"\n\"`n=== TEST B: fresh Terminal, Kitty protocol OFF\";        Remove-Item \"$env:TEMP\\claude\\kkp-tab.log\" -EA SilentlyContinue; RunTest $false; \"   tab received: $(Get-Content \"$env:TEMP\\claude\\kkp-tab.log\" -EA SilentlyContinue)\"\n'@\n# KillPortable runs before the tab writes its log; give the tab time to finish first\n$drv = $drv -replace '(?m)^(\\s*)KillPortable\\r?\\n\\}', \"`$1Start-Sleep 7`n`$1KillPortable`n}\"\nSet-Content \"$dir\\kkp-portable.ps1\" $drv; Remove-Item \"$dir\\kkp-portable-a.ps1\"\nforeach($f in 'kkp-tab.ps1','kkp-portable.ps1'){ $t=$null;$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile(\"$dir\\$f\",[ref]$t,[ref]$e); \"$f parse errors: $($e.Count)\" }\nGet-Content \"$dir\\kkp-tab.ps1\"; \"----\"; Select-String -Path \"$dir\\kkp-portable.ps1\" -Pattern 'KKPREADY|Start-Sleep|TEST' | % Line",
+      "isError": true,
+      "text": "Remove-Item on system path '\"\\$Host.UI.RawUI.WindowTitle' is blocked. This path is protected from removal.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "PowerShell script edit refused by the sandbox (isError)",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "try { $r = Invoke-RestMethod https://api.example.com/v1/users/000000000000000000 -TimeoutSec 10; \"success: $($r.success)\"; if ($r.success) { $d = $r.data; \"status: $($d.discord_status)\"; \"listening_to_spotify: $($d.listening_to_spotify)\"; \"activities: $($d.activities.Count)\"; $d.activities | ForEach-Object { \"- type=$($_.type) name=$($_.name) app=$($_.application_id) fields=\" + (($_.PSObject.Properties.Name) -join ',') } } } catch { \"error: \" + $_.ErrorDetails.Message }",
+      "isError": false,
+      "text": "error: The requested name is valid, but no data of the requested type was found.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "PowerShell Invoke-RestMethod against a public API",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$r = Invoke-RestMethod https://api.example.com/repos/example/tool/releases/latest; $r.tag_name; $r.published_at",
+      "isError": false,
+      "text": "v0.26.2\r\n\r\n14 June 2026 01:57:51",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "PowerShell Invoke-RestMethod against a remote API",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$root = 'C:\\Users\\dev\\Documents\\code\\site2'\n$scratch = 'C:\\Users\\DEV~1\\AppData\\Local\\Temp\\claude\\C--Users-dev-project\\36469338-8e93-4950-9566-54faa591bde4\\scratchpad'\n$edge = @(\"${env:ProgramFiles(x86)}\\Microsoft\\Edge\\Application\\msedge.exe\", \"$env:ProgramFiles\\Microsoft\\Edge\\Application\\msedge.exe\") | Where-Object { Test-Path $_ } | Select-Object -First 1\n\"edge: $edge\"\nif (-not $edge) { \"Edge not found; skipping.\"; return }\n$port = 8794\n$srv = Start-Process -FilePath 'python' -ArgumentList '-m', 'http.server', \"$port\", '--bind', '127.0.0.1' -WorkingDirectory $root -PassThru -WindowStyle Hidden\ntry {\n  $ready = $false\n  for ($i = 0; $i -lt 20; $i++) { try { $null = Invoke-WebRequest \"http://127.0.0.1:$port/\" -TimeoutSec 2; $ready = $true; break } catch { Start-Sleep -Milliseconds 500 } }\n  \"static server ready: $ready\"\n  $shots = @(\n    @{ name = 'home-light-desktop.png'; url = '/';                size = '1440,6400'; dark = $false },\n    @{ name = 'home-dark-desktop.png';  url = '/';                size = '1440,6400'; dark = $true },\n    @{ name = 'certs-dark-desktop.png'; url = '/certifications/'; size = '1440,1900'; dark = $true },\n    @{ name = 'home-light-mobile.png';  url = '/';                size = '390,844';   dark = $false }\n  )\n  foreach ($s in $shots) {\n    $out = Join-Path $scratch $s.name\n    if (Test-Path $out) { Remove-Item -LiteralPath $out -Force }\n    $profileDir = Join-Path $scratch (\"edge-profile-\" + [guid]::NewGuid().ToString('N'))\n    $args = @('--headless=new', '--disable-gpu', '--hide-scrollbars', \"--user-data-dir=$profileDir\", \"--window-size=$($s.size)\", '--virtual-time-budget=4000', \"--screenshot=$out\")\n    if ($s.dark) { $args += '--force-dark-mode'; $args += '--enable-features=WebContentsForceDark:enabled/false' }\n    $args += \"http://127.0.0.1:$port$($s.url)\"\n    $p = Start-Process -FilePath $edge -ArgumentList $args -PassThru -WindowStyle Hidden\n    $null = $p.WaitForExit(45000)\n    \"{0,-26} exists={1}  size={2} bytes\" -f $s.name, (Test-Path $out), $(if (Test-Path $out) { (Get-Item $out).Length } else { 0 })\n  }\n} finally {\n  Stop-Process -Id $srv.Id -Force -ErrorAction SilentlyContinue\n}",
+      "isError": true,
+      "text": "Remove-Item on system path ''/'' is blocked. This path is protected from removal.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "PowerShell script refused by the sandbox (isError)",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'); $env:CLOUDFLARE_API_TOKEN = [Environment]::GetEnvironmentVariable('CLOUDFLARE_API_TOKEN','User'); $env:CLOUDFLARE_ACCOUNT_ID = [Environment]::GetEnvironmentVariable('CLOUDFLARE_ACCOUNT_ID','User'); pnpm build *> $null; if ($LASTEXITCODE -ne 0) { 'build failed'; exit 1 }; pnpm exec wrangler deploy 2>&1 | Select-String -Pattern 'Version ID|ERROR'",
+      "isError": false,
+      "text": "│ chunks/errors_DEVlwFPJ.mjs                                │ esm  │ 21.61 KiB  │\r\nCurrent Version ID: f77701c6-d844-415f-a87b-2d316919e886",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "PowerShell wrangler deploy",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/notary\" && cat >> docs/findings.md <<'EOF'\n\n## Scaffold and test-kit lessons\n\n- **Imports with an explicit `.ts` extension** (`import { stripAnsi } from './shared/ansi.ts'`) work for both the mod loader and Node 24's `node --test`. Use them everywhere, so the pure `core/` files are tested by Node directly.\n- **`userConfig`** with `{ type, title, description, default }` and `options` for a string picker passes `claude plugin validate`.\n- **The root marketplace** (`.claude-plugin/marketplace.json`, plugin `source: \"./plugins/receipts\"`) validates.\n- **The `claude plugin test` kit:**\n  - Every event the test fires must be answered beneath the plugin by the test's own `on(...)`. For example, `on('session.start', (_$, e) => ({ cwd: e.cwd }))`.\n  - The test's `$` has **no `$.state` noun**. To observe writes, hook `on('state.set', (_$, e, next) => { seen.push(e.value); return next(e) })`.\n  - `SessionStartInput` is `{ cwd, surface, isInteractive }`.\n  - The test sandbox has no fs, so embed data in the test files.\n- **Heredocs in this Git Bash collapse `\\\\`.** Write files containing backslashes with the Write or Edit tools, not shell heredocs.\nEOF\ngit add -A && git commit -q -m \"chore: repo scaffold, Phase 0 probe + findings, shared/ansi, receipts skeleton\n\n- marketplace + receipts plugin manifest with userConfig (mode/smartCheck/stamp/enabled)\n- scripts/sync-shared.mjs copies /shared into plugins (with --check)\n- node --test for pure code, claude plugin test for mod integration\n- spec updated with Phase 0 results (Stop before turn.complete, stamp via session.append)\n\nCo-Authored-By: Claude Opus 5.5 <someone@example.com>\" && git log --oneline && git status --short | head",
+      "isError": false,
+      "text": "warning: in the working copy of 'tools/probe/hooks/register.ts', CRLF will be replaced by LF the next time Git touches it\n324eb85 chore: repo scaffold, Phase 0 probe + findings, shared/ansi, receipts skeleton\n4c710a5 docs: Notary suite + Receipts v1 design spec",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "heredoc appends docs that mention node --test, then git commit",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "git add -A; git status --short; $msg = @'\nEnforce authorization with an @authorized decorator\n\nHandlers are registered from a single COMMANDS table and build_app()\nrefuses to start if any handler lacks @authorized. Adds pyproject.toml\nwith ruff/basedpyright/pytest config targeting Python 3.11.\n'@\ngit commit -q -m $msg; git log --oneline -1",
+      "isError": false,
+      "text": "M  bot.py\nA  pyproject.toml\n616497c Enforce authorization with an @authorized decorator",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "PowerShell git commit whose message mentions pytest",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$b = Get-Content bot.py -Raw\n$pairs = [ordered]@{\n'perform_shutdown, follow_down(\"shutdown\", \"⚫ <b>Off</b>\"),' = 'perform_shutdown, follow_down(\"shutdown\", \"⚫\", \"Off\", \"Shut down in {t}. Use /wake to power it back on.\"),'\n'perform_sleep, follow_down(\"sleep\", \"🌙 <b>Asleep</b>\"),' = 'perform_sleep, follow_down(\"sleep\", \"🌙\", \"Asleep\", \"Fell asleep in {t}. Use /wake to wake it.\"),'\n}\nforeach ($k in $pairs.Keys) { if (-not $b.Contains($k)) { throw \"missing: $k\" }; $b = $b.Replace($k, $pairs[$k]) }\n[IO.File]::WriteAllText(\"$PWD\\bot.py\", $b)\n$t = Get-Content tests\\test_bot.py -Raw\n$pairs = [ordered]@{\n'    assert \"Up</b> after\" in final and \"Magic packet sent\" in final' = '    assert final.startswith(\"🟢 <b>Awake</b>\") and \"Booted in\" in final'\n'@pytest.mark.parametrize((\"name\", \"done\"), [(\"shutdown\", \"Off</b> after\"), (\"sleep\", \"Asleep</b> after\")])' = '@pytest.mark.parametrize((\"name\", \"done\"), [(\"shutdown\", \"⚫ <b>Off</b>\\nShut down in\"), (\"sleep\", \"🌙 <b>Asleep</b>\\nFell asleep in\")])'\n'    assert \"Went down after\" in final and \"Back up</b> after\" in final' = '    assert final.startswith(\"🟢 <b>Back up</b>\") and \"went down after\" in final'\n}\nforeach ($k in $pairs.Keys) { if (-not $t.Contains($k)) { throw \"missing: $k\" }; $t = $t.Replace($k, $pairs[$k]) }\n$t += @'\n\n\n@pytest.mark.parametrize(\n    (\"seconds\", \"text\"), [(0, \"0s\"), (8.4, \"8s\"), (59.6, \"1m\"), (83, \"1m 23s\"), (180, \"3m\"), (-1, \"0s\")]\n)\ndef test_duration_formatting(seconds: float, text: str) -> None:\n    assert bot.duration(seconds) == text\n'@\n[IO.File]::WriteAllText(\"$PWD\\tests\\test_bot.py\", $t)\n.\\venv\\Scripts\\ruff.exe check --fix -q .; .\\venv\\Scripts\\ruff.exe format -q .; .\\venv\\Scripts\\ruff.exe check .; .\\venv\\Scripts\\ruff.exe format --check . | Select-Object -Last 1; .\\venv\\Scripts\\basedpyright.exe 2>&1 | Select-Object -Last 4; .\\venv\\Scripts\\python.exe -m pytest -q 2>&1 | Select-Object -Last 12",
+      "isError": true,
+      "text": "Exit code 1\nException: \r\nLine |\r\n  14 |  … pairs.Keys) { if (-not $t.Contains($k)) { throw \"missing: $k\" }; $t = …\r\n     |                                              ~~~~~~~~~~~~~~~~~~~\r\n     | missing: @pytest.mark.parametrize((\"name\", \"done\"), [(\"shutdown\", \"Off</b> after\"), (\"sleep\", \"Asleep</b> after\")])",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "PowerShell edit script whose text contains @pytest.mark (isError)",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"C:/Users/dev/Documents/code/site\" && python - <<'PY'\np=\"src/scripts/motion/notfound.ts\"\ns=open(p,encoding=\"utf-8\").read()\ndef rep(a,b):\n    global s\n    assert s.count(a)==1,a; s=s.replace(a,b)\nrep(\"\"\"// The trace, once the 404 has typed in: each hop rises in \"Checking…\",\n// resolves, and the line draws on to the next, each part starting while\n// the one before is still moving.\"\"\",\"\"\"// The trace, once the 404 has typed in: the line carries the check across.\n// Each hop rises in; it says \"Checking…\" (its dots appearing in turn) while\n// its link draws on toward the next hop, and the moment the line arrives,\n// it answers \"Working\" (its dot inks in green from the centre, settles on a\n// spring and sends out one soft ring) and the next hop starts checking. The\n// last hop, with no line to send, answers \"Not found\" with one shake.\"\"\")\nrep(\"\"\"import { EASE, sequence, type Step } from \"../motion\";\n\nconst STEP = 450;\nconst RESTART = 600;\nconst LABELS: Record<string, string> = {\n  checking: \"Checking…\",\"\"\",\"\"\"import { EASE } from \"../motion\";\n\n// The sequence's beats (ms): a hop's link starts drawing LINK_AT after the\n// hop starts rising and takes DRAW; the next hop starts rising NEXT_AT\n// after the link starts; the last hop answers ANSWER after it starts\n// checking.\nconst RISE = 600;\nconst LINK_AT = 450;\nconst DRAW = 450;\nconst NEXT_AT = 150;\nconst ANSWER = 300;\nconst RESTART = 600;\nconst LABELS: Record<string, string> = {\n  // A hop the check hasn't reached yet shows no word.\n  waiting: \"Checking…\",\n  checking: \"Checking…\",\"\"\")\n# swap: overlap + colour + into without out\na=s.index(\"  // A status changing words:\")\nz=s.index(\"  // \\\"Not found\\\" lands with one small shake\")\ns=s[:a]+'''  // A status changing words: the old one leaves upward out of its mask,\n  // quickly, and the new one rises in from below 0.1s later with a slight\n  // lean that settles, in the same cell (the width never changes). An\n  // answer arrives soft and settles into ink. With `still`, the words just\n  // swap.\n  const word = (hop: HTMLElement, state: string) =>\n    hop.querySelector<HTMLElement>(`.states [data-is=\"${state}\"]`);\n  const answers = new Set([\"ok\", \"missing\"]);\n  const swap = (\n    hop: HTMLElement,\n    from: string,\n    to: string,\n    delay: number,\n    still = false,\n  ) => {\n    const out = word(hop, from);\n    const into = word(hop, to);\n    const anims = [\n      at(delay, () => {\n        if (out && !still) out.dataset.leaving = \"\";\n        setState(hop, to);\n      }),\n    ];\n    if (still) return anims;\n    if (out) {\n      const leave = out.animate(\n        [{ transform: \"none\" }, { transform: \"translateY(-100%)\" }],\n        { duration: 200, delay, easing: EASE.inOut, fill: \"forwards\" },\n      );\n      leave.onfinish = () => {\n        delete out.dataset.leaving;\n        leave.cancel();\n      };\n      anims.push(leave);\n    }\n    if (into) {\n      const style = getComputedStyle(hop);\n      const soft = style.getPropertyValue(\"--soft\").trim();\n      const ink = style.getPropertyValue(\"--ink\").trim();\n      const tint = answers.has(to) && soft && ink;\n      anims.push(\n        into.animate(\n          [\n            {\n              transform: \"translateY(100%) skewY(4deg)\",\n              ...(tint ? { color: soft } : {}),\n            },\n            { transform: \"none\", ...(tint ? { color: ink } : {}) },\n          ],\n          {\n            duration: 300,\n            delay: delay + (out ? 100 : 0),\n            easing: EASE.out,\n            fill: \"backwards\",\n          },\n        ),\n      );\n    }\n    return anims;\n  };\n  // \"Working\" lands: the green inks in from the centre over the grey, the\n  // dot settles on a spring, and one soft ring grows 4px and fades.\n  const ink = (hop: HTMLElement, delay: number) => {\n    const dot = hop.querySelector<HTMLElement>(\".dot\");\n    if (!dot) return [];\n    const size = dot.offsetWidth || 9;\n    return [\n      dot.animate(\n        [\n          { clipPath: \"circle(0% at 50% 50%)\" },\n          { clipPath: \"circle(75% at 50% 50%)\" },\n        ],\n        {\n          duration: 280,\n          delay,\n          easing: EASE.out,\n          fill: \"backwards\",\n          pseudoElement: \"::before\",\n        },\n      ),\n      dot.animate([{ transform: \"scale(0.85)\" }, { transform: \"none\" }], {\n        duration: 500,\n        delay,\n        easing: EASE.spring,\n      }),\n      dot.animate(\n        [\n          { opacity: 0.6, transform: \"none\" },\n          { opacity: 0, transform: `scale(${(size + 8) / size})` },\n        ],\n        { duration: 600, delay, easing: EASE.out, pseudoElement: \"::after\" },\n      ),\n    ];\n  };\n'''+s[z:]\n# play(): rebuild with explicit beats\na=s.index(\"  // The sequence. Skipping to the end\")\nz=s.index(\"  if (calm.matches) {\")\ns=s[:a]+'''  // The sequence. Skipping to the end drops every animation still\n  // running in the trace (none of them would leave anything behind) and\n  // sets the end state, which is plain CSS.\n  let run: Animation[] | null = null;\n  const finish = () => {\n    run = null;\n    for (const a of trace.getAnimations({ subtree: true })) a.cancel();\n    hops.forEach((hop, i) => {\n      hop.dataset.shown = \"\";\n      hop.dataset.drawn = \"\";\n      setState(hop, i === hops.length - 1 ? \"missing\" : \"ok\");\n      for (const w of hop.querySelectorAll<HTMLElement>(\".states > span\")) {\n        delete w.dataset.leaving;\n      }\n    });\n    trace.dataset.done = \"\";\n  };\n\n  const play = () => {\n    // Every hop is held unseen (and its link undrawn) by its own animation\n    // until its moment; the first one is already checking.\n    hops.forEach((hop, i) => {\n      setState(hop, i === 0 ? \"checking\" : \"waiting\");\n      hop.dataset.shown = \"\";\n      hop.dataset.drawn = \"\";\n    });\n    const anims: Animation[] = [];\n    let rise = 0;\n    hops.forEach((hop, i) => {\n      const last = i === hops.length - 1;\n      const next = hops[i + 1];\n      anims.push(\n        hop.animate(\n          [\n            { transform: \"translateY(24px)\", opacity: 0 },\n            { transform: \"none\", opacity: 1 },\n          ],\n          { duration: RISE, delay: rise, easing: EASE.out, fill: \"backwards\" },\n        ),\n      );\n      if (last) {\n        // The previous hop's line arrived as this one started checking.\n        const answer = (i === 0 ? 0 : rise - NEXT_AT + DRAW) + ANSWER;\n        anims.push(...swap(hop, \"checking\", \"missing\", answer));\n        const s = shake(hop, answer + 100);\n        if (s) anims.push(s);\n        return;\n      }\n      // The link draws toward the next hop; as it arrives, this hop\n      // answers and the next one starts checking.\n      const link = rise + LINK_AT;\n      const arrive = link + DRAW;\n      anims.push(\n        hop.animate(\n          [\n            { transform: stacked.matches ? \"scaleY(0)\" : \"scaleX(0)\" },\n            { transform: \"none\" },\n          ],\n          {\n            duration: DRAW,\n            delay: link,\n            easing: EASE.out,\n            fill: \"backwards\",\n            pseudoElement: \"::after\",\n          },\n        ),\n        hop.animate([{ opacity: 0 }, { opacity: 1 }], {\n          duration: 150,\n          delay: arrive - 100,\n          fill: \"backwards\",\n          pseudoElement: \"::before\",\n        }),\n        ...swap(hop, \"checking\", \"ok\", arrive),\n        ...ink(hop, arrive),\n      );\n      if (next) anims.push(...swap(next, \"waiting\", \"checking\", arrive));\n      rise = link + NEXT_AT;\n    });\n    run = anims;\n    void Promise.all(anims.map((a) => a.finished)).then(\n      () => {\n        if (run !== anims) return;\n        finish();\n        cue();\n      },\n      () => {},\n    );\n  };\n\n'''+s[z:]\nopen(p,\"w\",encoding=\"utf-8\").write(s)\nPY\nnpx prettier --write src/scripts/motion/notfound.ts >/dev/null 2>&1; npx eslint src/scripts/motion/notfound.ts 2>&1 | grep -v \"npm notice\"; echo \"eslint ${PIPESTATUS[0]}\"",
+      "isError": true,
+      "text": "Exit code 2\n/usr/bin/bash: -c: line 226: unexpected EOF while looking for matching `''",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "python heredoc edit with a bash quoting error (isError)",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Desktop/work/dns-core\" && K=\"/c/Users/dev/Desktop/work/tools/vms/dns/id_ed25519\"; S=\"ssh -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i $K -p 2222 someone@example.com\"; tar -cf - . | $S 'rm -rf ~/dns-core && mkdir ~/dns-core && tar -xf - -C ~/dns-core && cd ~/dns-core && git -c core.autocrlf=false status --short && git -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qam \"wip test\" && git log --oneline -2 && echo \"--- shellcheck\" && shellcheck -x \"automated install/basic-install.sh\" advanced/Scripts/update.sh && echo shellcheck-clean'",
+      "isError": true,
+      "text": "Exit code 255\nWarning: Identity file /c/Users/dev/Desktop/Diagnostic not accessible: No such file or directory.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "ssh/tar copy failing (Exit code 255)",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && git status --short && git check-ignore -q CLAUDE.md .agent .claude && echo excluded-ok && git add src/lib/music/state.ts src/lib/music/config.ts src/lib/music/music.test.ts docs/DECISIONS.md && git commit -q -m \"Show ALL-CAPS game names in title case, with an owner override list\" && git log --oneline -3",
+      "isError": true,
+      "text": "Exit code 128\n M docs/DECISIONS.md\n M src/lib/music/config.ts\n M src/lib/music/music.test.ts\n M src/lib/music/state.ts\nfatal: --quiet is only valid with a single pathname",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "git add/commit failing (Exit code 128)",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "for i in $(seq 1 40); do if curl -s -A \"Mozilla/5.0\" https://example.com/ | grep -q \"9db9f15\"; then echo \"live with 9db9f15 after $((i*15))s\"; exit 0; fi; sleep 15; done; echo \"not yet after 10 min\"",
+      "isError": false,
+      "text": "Command running in background with ID: bt18ivb69. Output is being written to: C:\\Users\\DEV~1\\AppData\\Local\\Temp\\claude\\C--Users-dev-project\\6317f1f2-2de8-4420-b76b-8ee5985cb687\\tasks\\bt18ivb69.output. You will be notified when it completes. To check interim output, use Read on that file path.",
+      "backgrounded": true
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "background curl loop against the public site",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "L=$(sed -n '117p' series.txt); f=$(echo \"$L\" | cut -f1); tid=$(echo \"$L\" | cut -f3); u=$(grep -F \"${f%.jpg}\" media_all.tsv | cut -f2 | sed 's/?.*//')\nD=\"C:/Users/dev/Desktop/imgs/new\"; mkdir -p \"$D\"; curl -s \"${u%.*}?format=jpg&name=orig\" -o \"$D/someone-pink-blue-halo.jpg\"\necho \"someone-pink-blue-halo.jpg  https://example.com/someone/status/$tid\" > \"$D/sources.txt\"; cat \"$D/sources.txt\"; python -I -c \"from PIL import Image;print(Image.open(r'$D/someone-pink-blue-halo.jpg').size)\"",
+      "isError": false,
+      "text": "someone-pink-blue-halo.jpg  https://example.com/someone/status/000000000000000000\n(928, 1232)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "curl download from a public URL",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && pnpm exec prettier --write docs src/styles --log-level warn; pnpm check >/dev/null 2>&1 && pnpm lint >/dev/null 2>&1 && pnpm format:check >/dev/null 2>&1 && pnpm test 2>&1 | grep \"Tests \" ; echo \"exit $?\"; git check-ignore -q CLAUDE.md .agent .claude && echo excluded-ok",
+      "isError": true,
+      "text": "Exit code 128\n      Tests  230 passed (230)\nexit 0\nfatal: --quiet is only valid with a single pathname",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "tests \"230 passed\", then a trailing git check-ignore exits 128: that exit code is not the tests",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"C:/Users/dev/Documents/code/app/spike\" && export PATH=\"$USERPROFILE/.cargo/bin:$PATH\"; cargo test 2>&1 | grep -E \"^error|test result\"; cargo build -q --release 2>&1 | grep -E \"^(error|warning)\"; ./target/release/app-spike.exe --label dev --out \"$TEMP/app-smart\" 2>&1 | grep -E \"smart|total\"; rm -rf \"$TEMP/app-smart\"",
+      "isError": false,
+      "text": "test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s\nsmart_predict_data       FAIL      6 ms  WMI ROOT\\WMI: HRESULT Call failed with: 0x80041003\nsmart_predict_status     FAIL      4 ms  WMI ROOT\\WMI: HRESULT Call failed with: 0x80041003\ntotal 9879 ms (elevated: false)\nwrote C:\\Users\\DEV~1\\AppData\\Local\\Temp/app-smart\\dev-user-1791322071.json",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "cargo test \"34 passed; 0 failed\", then the built program prints its own FAIL diagnostics",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "pnpm lint 2>&1 | Select-Object -Last 4; pnpm typecheck 2>&1 | Select-Object -Last 4; pnpm test 2>&1 | Select-Object -Last 5; pnpm exec playwright test --project=chromium --workers=1 2>&1 | Select-Object -Last 5",
+      "isError": false,
+      "text": "$ eslint .\r\nError: ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL\r\n\r\n  × Command \"typecheck\" not found\r\n\r\n Test Files  14 passed (14)\r\n      Tests  158 passed (158)\r\n   Start at  18:49:21\r\n   Duration  1.89s (import 62%, transform 25%, tests 11%, worker 2%)\r\n\r\n  ok 30 [chromium] › e2e\\shell.spec.ts:450:3 › comments backend (not configured here) › API says not-configured, admin refuses without Access (78ms)\r\n  ok 31 [chromium] › e2e\\shell.spec.ts:468:3 › blog › lists no drafts and serves an RSS feed per language (119ms)\r\n\r\n  2 skipped\r\n  29 passed (13.0s)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "pnpm \"× Command \"typecheck\" not found\" is a missing script; unit and browser tests passed",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"C:/Users/dev/Documents/code/bot\" && python - <<'PYEOF'\nfrom pathlib import Path\ndef add(path, after, line):\n    p = Path(path); s = p.read_bytes().decode()\n    assert s.count(after) == 1, (path, after)\n    s = s.replace(after, after + line); p.write_bytes(s.encode())\nadd(\"acme/history.py\", \"from acme.messages import duration\\n\", \"from acme.state import load_json, save_json\\n\")\nadd(\"acme/timers.py\", \"from acme.power import POWER_ACTIONS, run_power_action, start_wake\\n\", \"from acme.state import load_json, save_json\\n\")\nadd(\"acme/server.py\", \"from acme.probes import LOW_DISK_FRACTION, size\\n\", \"from acme.state import load_json, save_json\\nfrom acme.tasks import repeat\\n\")\nPYEOF\nvenv/Scripts/python -m ruff check --fix acme tests && venv/Scripts/python -m ruff format . && venv/Scripts/python -m basedpyright 2>&1 | tail -8 && venv/Scripts/python -m pytest -q 2>&1 | tail -15",
+      "isError": false,
+      "text": "Found 3 errors (3 fixed, 0 remaining).\n26 files left unchanged\n0 errors, 0 warnings, 0 notes\n........................................................................ [ 16%]\r\n........................................................................ [ 32%]\r\n........................................................................ [ 49%]\r\n........................................................................ [ 65%]\r\n........................................................................ [ 82%]\r\n.....................................................................sss [ 98%]\r\nssssss                                                                   [100%]\r\n429 passed, 9 skipped in 3.24s\n[This command modified 3 files you've previously read: acme\\timers.py, acme\\internet.py, acme\\server.py. Call Read before editing.]",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "ruff \"Found 3 errors (3 fixed, 0 remaining)\" is not a failure; pytest 429 passed",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"C:/Users/dev/Documents/code/web\" && timeout 120 pnpm exec vitest run src/lib/security-txt.test.ts 2>&1 | grep -E \"×|passed|failed\" | head -4",
+      "isError": false,
+      "text": " Test Files  1 passed (1)\n      Tests  3 passed (3)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "timeout 120 pnpm exec vitest …: a timeout prefix wraps the runner",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'); pnpm verify *> node_modules/.cache/web-tools/verify.log; \"verify exit $LASTEXITCODE\"; Select-String -Path node_modules/.cache/web-tools/verify.log -Pattern \"Tests  |CSP check passed|ELIFECYCLE|error\" | Select-Object -Last 4 | ForEach-Object { $_.Line.Substring(0, [math]::Min(90, $_.Line.Length)) }; pnpm test:e2e *> node_modules/.cache/web-tools/e2e.log; \"e2e exit $LASTEXITCODE\"; Get-Content node_modules/.cache/web-tools/e2e.log | Select-String \"passed|failed|skipped|^\\s+\\d+\\) |Error:\" | Select-Object -Last 8; pnpm test:visual *> node_modules/.cache/web-tools/visual.log; \"visual exit $LASTEXITCODE\"; Get-Content node_modules/.cache/web-tools/visual.log | Select-String \"passed|failed|^\\s+\\d+\\) \" | Select-Object -Last 5",
+      "isError": false,
+      "text": "verify exit 0\r\n- 0 errors\r\n      Tests  491 passed (491)\r\nCSP check passed: 28 pages, inline script hashes: 'sha256-yRJCQ7pCW/t/g9C8mFYDVOsoqP7r0fP/\r\ne2e exit 0\r\n\r\n  2 skipped\r\n  109 passed (27.8s)\r\nvisual exit 0\r\n  36 passed (10.5s)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "PowerShell: pnpm verify, e2e and visual to logs, each \"exit 0\" echoed with passing summaries",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && sed -i \"164s/.*/  it('fetches still decorations from the decoration path only', () => {/\" src/lib/friends.test.ts && pnpm exec prettier --write src/lib/friends.test.ts src/lib/friend-status.ts src/scripts/friend-status.ts src/components/FriendCard.astro src/lib/edge-cache.ts \"src/pages/api/friends/decoration/[asset].ts\" src/pages/api/cover.ts src/pages/api/friends/status.ts src/lib/music/cover.ts >/dev/null && pnpm exec vitest run src/lib/friends.test.ts src/lib/music/cover.test.ts 2>&1 | tail -6 && pnpm exec tsc --noEmit -p . 2>&1 | tail -5; pnpm exec eslint src/lib src/scripts src/pages src/components/FriendCard.astro 2>&1 | tail -5",
+      "isError": false,
+      "text": " Test Files  2 passed (2)\n      Tests  20 passed (20)\n   Start at  14:11:17\n   Duration  269ms (import 50%, transform 32%, tests 15%, worker 3%)\n\nsrc/lib/nav.ts(1,31): error TS2307: Cannot find module '../components/Icon.astro' or its corresponding type declarations.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "vitest \"20 passed\" in a chain whose later tsc prints error TS2307",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/site\"; npx eslint . > /tmp/l1.txt 2>&1; echo eslint=$?; npx prettier --check . > /tmp/l2.txt 2>&1; echo prettier=$?; tail -5 /tmp/l1.txt /tmp/l2.txt",
+      "isError": true,
+      "text": "Exit code 1\neslint=0\nprettier=0\ntail: option used in invalid context -- 5",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "eslint=0 prettier=0 echoed, then a broken tail exits 1",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/web\" && pnpm exec prettier --check src/components/MusicCard.tsx src/styles/global.css >/dev/null && pnpm build >/dev/null 2>&1 && pnpm exec playwright test --project=visual 2>&1 | grep -E \"passed|failed|✘\" | head",
+      "isError": true,
+      "text": "Exit code 1\n[\u001b[33mwarn\u001b[39m] src/components/MusicCard.tsx\n[\u001b[33mwarn\u001b[39m] Code style issues found in the above file. Run Prettier with --write to fix.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "prettier --check fails first in an && chain, so playwright never ran",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "Set-Location \"C:\\Users\\dev\\Documents\\code\\web\"; pnpm build 2>&1 | Select-Object -Last 1; pnpm exec playwright test --project=chromium 2>&1 | Select-Object -Last 12",
+      "isError": true,
+      "text": "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "PowerShell build ; playwright rejected by the user: the command never ran",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "dotnet test",
+      "isError": true,
+      "text": "Exit code 1\n\u001b[31mFailed!\u001b[0m - Failed:     2, Passed:    40, Skipped:     0, Total:    42",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "dotnet test, ANSI-colored \"Failed!\"",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "dotnet test",
+      "isError": false,
+      "text": "Passed!  - Failed:     0, Passed:    42, Skipped:     0, Total:    42, Duration: 1 s",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "dotnet test passing, \"Failed: 0\"",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "dotnet test",
+      "isError": true,
+      "text": "Exit code 1\r\nBaşarısız!  - Başarısız:     1, Başarılı:    41, Atlanan:     0, Toplam:    42\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "dotnet test on a Turkish Windows, CRLF",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "dotnet test",
+      "isError": false,
+      "text": "Başarılı!  - Başarısız:     0, Başarılı:    42, Atlanan:     0, Toplam:    42\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "dotnet test passing on a Turkish Windows",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "Invoke-Pester -Path tests",
+      "isError": false,
+      "text": "Tests completed in 1.2s\r\nTests Passed: 3, Failed: 1, Skipped: 0 NotRun: 0\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "Invoke-Pester without -CI: exit 0, failure only in the output",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "Invoke-Pester -Path tests -CI",
+      "isError": false,
+      "text": "Tests completed in 0.9s\r\nTests Passed: 12, Failed: 0, Skipped: 0 NotRun: 0\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "Invoke-Pester -CI passing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "Invoke-Pester -Path tests",
+      "isError": false,
+      "text": "Command running in background with ID: b1. Output is being written to: C:\\Users\\DEV~1\\AppData\\Local\\Temp\\claude\\tasks\\b1.output.",
+      "backgrounded": true
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pending"
+    },
+    "note": "Invoke-Pester run_in_background",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "npm.cmd test",
+      "isError": true,
+      "text": "Exit code 1\r\n\r\n FAIL  src/date.test.ts > parse > keeps the day\r\n Test Files  1 failed (1)\r\n      Tests  1 failed | 41 passed (42)\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "PowerShell npm.cmd test, CRLF",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "npm test 2>&1 | Select-Object -Last 3",
+      "isError": false,
+      "text": "      Tests  1 failed | 41 passed (42)\r\n   Start at  10:02:11\r\n   Duration  1.20s\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "PowerShell masked: npm test | Select-Object hides the exit code",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cmd /c npm test",
+      "isError": false,
+      "text": "      Tests  42 passed (42)\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "cmd /c npm test, CRLF",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "python -m pytest -q",
+      "isError": true,
+      "text": "Exit code 1\r\nFAILED tests/test_tarih.py::test_gn_ad - AssertionError\r\n1 failed, 5 passed in 0.12s\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "pytest with cp857-mojibake Turkish test name, CRLF",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "python -m pytest -q",
+      "isError": false,
+      "text": "............                                                             [100%]\r\n12 passed in 0.31s\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "pytest passing, CRLF",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "iwr http://localhost:5173 -UseBasicParsing | Select-Object StatusCode",
+      "isError": false,
+      "text": "\r\nStatusCode\r\n----------\r\n       200\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "PowerShell iwr against localhost",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "Invoke-RestMethod http://127.0.0.1:8787/health",
+      "isError": false,
+      "text": "ok",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "PowerShell Invoke-RestMethod against localhost",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "go test ./...",
+      "isError": true,
+      "text": "Exit code 1\n--- FAIL: TestParse (0.00s)\n    parse_test.go:14: got 1, want 2\nFAIL\nFAIL\texample.com/date\t0.012s\nFAIL",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "go test failing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "go test ./...",
+      "isError": false,
+      "text": "ok  \texample.com/date\t0.012s\nok  \texample.com/date/zone\t0.004s",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "go test passing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cargo test",
+      "isError": false,
+      "text": "running 31 tests\ntest result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "cargo test passing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cargo test 2>&1 | tail -4",
+      "isError": false,
+      "text": "thread 'date::tests::leap' panicked at src/date.rs:88:9:\nassertion failed\n\ntest result: FAILED. 30 passed; 1 failed; 0 ignored",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "masked cargo test panic via tail",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "./mvnw test",
+      "isError": true,
+      "text": "Exit code 1\n[ERROR] Tests run: 10, Failures: 1, Errors: 0, Skipped: 0\n[INFO] BUILD FAILURE",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "mvnw test failing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "./gradlew test",
+      "isError": false,
+      "text": "BUILD SUCCESSFUL in 4s\n5 actionable tasks: 2 executed, 3 up-to-date",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "gradlew test passing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "bundle exec rspec",
+      "isError": true,
+      "text": "Exit code 1\n\nFinished in 0.4 seconds\n12 examples, 1 failure",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "rspec failing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "vendor/bin/phpunit",
+      "isError": false,
+      "text": "OK (25 tests, 60 assertions)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "phpunit passing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "ctest --output-on-failure",
+      "isError": false,
+      "text": "100% tests passed, 0 tests failed out of 8",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "ctest passing, \"0 tests failed\"",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "make test",
+      "isError": false,
+      "text": "go test ./...\nok  \texample.com/x\t0.01s",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "make test",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "tox -e py312",
+      "isError": false,
+      "text": "  py312: OK (3.2 seconds)\n  congratulations :) (3.4 seconds)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "tox passing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "deno test",
+      "isError": false,
+      "text": "ok | 5 passed | 0 failed (40ms)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "deno test passing, \"0 failed\"",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "bun test",
+      "isError": false,
+      "text": " 12 pass\n 0 fail\n 30 expect() calls\nRan 12 tests across 3 files. [88.00ms]",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "bun test passing, \" 0 fail\"",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "node --test",
+      "isError": false,
+      "text": "ℹ tests 14\nℹ suites 0\nℹ pass 14\nℹ fail 0\nℹ cancelled 0",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "node --test passing, \"ℹ fail 0\"",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npx playwright test",
+      "isError": false,
+      "text": "Running 27 tests using 4 workers\n  27 passed (12.3s)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "playwright test passing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npm run build && npm test",
+      "isError": false,
+      "text": "> build\n> tsc -b\n\n Test Files  3 passed (3)\n      Tests  42 passed (42)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "&& chain: build then tests, strongest segment decides",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "npm.cmd test",
+      "isError": true,
+      "text": "Exit code 1\r\nnpm.cmd: The term 'npm.cmd' is not recognized as a name of a cmdlet, function, script file, or executable program.\r\nCheck the spelling of the name, or if a path was included, verify that the path is correct and try again.\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "PowerShell 7: npm.cmd is not recognized, so no test ran",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "npm.cmd test",
+      "isError": true,
+      "text": "Exit code 1\r\nThe term 'npm.cmd' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "Windows PowerShell 5.1: npm.cmd is not recognized, so no test ran",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "set -e; npm ci; npm test",
+      "isError": true,
+      "text": "Exit code 1\nnpm error code ERESOLVE\nnpm error ERESOLVE unable to resolve dependency tree",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "set -e script dies at npm ci, so npm test never ran",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "set -euo pipefail; npm test | tee test.log",
+      "isError": true,
+      "text": "Exit code 1\n Test Files  1 failed (1)\n      Tests  1 failed | 41 passed (42)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "pipefail un-masks a piped npm test",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "set -o pipefail; npm test 2>&1 | tail -3",
+      "isError": false,
+      "text": " Test Files  3 passed (3)\n      Tests  42 passed (42)\n   Duration  1.10s",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "pipefail with a passing piped npm test",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npm test -- --watch=false",
+      "isError": false,
+      "text": "Tests:       42 passed, 42 total\nTest Suites: 5 passed, 5 total",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "npm test -- --watch=false runs once",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npx jest --watch=false",
+      "isError": true,
+      "text": "Exit code 1\nTests:       1 failed, 1 skipped, 4 passed, 6 total\nTest Suites: 1 failed, 1 passed, 2 total",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "jest summary with failed and skipped",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npx jest",
+      "isError": false,
+      "text": "Test Suites: 2 passed, 2 total\nTests:       1 skipped, 5 passed, 6 total\nSnapshots:   0 total",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "jest \"Tests: 1 skipped, 5 passed\"",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npx vitest --run",
+      "isError": false,
+      "text": "      Tests  12 passed | 2 skipped (14)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "vitest --run with skipped tests",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "pytest -q",
+      "isError": true,
+      "text": "Exit code 5\n\nno tests ran in 0.01s",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "zero-tests"
+    },
+    "note": "pytest with no tests (exit 5)",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npx jest",
+      "isError": true,
+      "text": "Exit code 1\nNo tests found, exiting with code 1\nRun with `--passWithNoTests` to exit with code 0",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "zero-tests"
+    },
+    "note": "jest with no tests",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npx vitest run src/none",
+      "isError": true,
+      "text": "Exit code 1\nNo test files found, exiting with code 1",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "zero-tests"
+    },
+    "note": "vitest with no test files",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npx tsc -b",
+      "isError": false,
+      "text": "",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "tsc -b with no output",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npx vue-tsc --noEmit",
+      "isError": true,
+      "text": "Exit code 2\nsrc/App.vue(12,7): error TS2322: Type 'string' is not assignable to type 'number'.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "fail"
+    },
+    "note": "vue-tsc failing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "mypy src",
+      "isError": false,
+      "text": "Success: no issues found in 12 source files",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "mypy passing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "ruff check .",
+      "isError": true,
+      "text": "Exit code 1\nsrc/app.py:3:8: F401 [*] `os` imported but unused\nFound 3 errors.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "fail"
+    },
+    "note": "ruff failing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npx biome check .",
+      "isError": false,
+      "text": "Checked 41 files in 12ms. No fixes applied.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "biome passing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "go vet ./...",
+      "isError": false,
+      "text": "",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "go vet passing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "wget -qO- http://127.0.0.1:8080/health",
+      "isError": false,
+      "text": "{\"ok\":true}",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "wget against localhost",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npm test -- --listTests",
+      "isError": false,
+      "text": "/repo/src/date.test.ts",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "jest --listTests runs nothing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "pytest --collect-only -q",
+      "isError": false,
+      "text": "tests/test_date.py::test_parse\n1 test collected in 0.01s",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "pytest --collect-only runs nothing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cargo test --no-run",
+      "isError": false,
+      "text": "Finished `test` profile [unoptimized + debuginfo] target(s) in 3.1s",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "cargo test --no-run runs nothing",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npm test || true",
+      "isError": false,
+      "text": "      Tests  1 failed | 41 passed (42)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "|| true hides the result",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "npm test || exit 0",
+      "isError": false,
+      "text": "      Tests  42 passed (42)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "|| exit 0 hides the result",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npx vitest --version",
+      "isError": false,
+      "text": "vitest/3.2.4 win32-x64 node-v24.16.0",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "--version",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npx jest --help",
+      "isError": false,
+      "text": "Usage: jest [--config=<pathToConfigFile>] [TestPathPattern]",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "--help",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "curl https://example.com",
+      "isError": false,
+      "text": "<!doctype html><title>Example Domain</title>",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "curl against a public URL",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npm install",
+      "isError": false,
+      "text": "added 12 packages in 2s",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "npm install",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "git diff --stat",
+      "isError": false,
+      "text": " src/date.ts | 4 ++--\n 1 file changed, 2 insertions(+), 2 deletions(-)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "git diff",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "Get-Content tests\\date.test.ts | Select-String \"tests pass\"",
+      "isError": false,
+      "text": "  it('all tests pass', () => {",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "PowerShell reading a test file is not running it",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npm run build && npm test",
+      "isError": true,
+      "text": "Exit code 2\n> build\n> tsc -b\n\nsrc/date.ts(4,3): error TS2304: Cannot find name 'x'.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "fail"
+    },
+    "note": "&& chain where the build failed, so npm test never ran",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app/worker\" && npx vitest run test/config.test.ts 2>&1 | grep -E \"×|Tests \"; node -e '\nconst fs=require(\"fs\"); const p=\"package.json\"; const s=fs.readFileSync(p,\"utf8\");\nconst a=\"    \\\"dev\\\": \\\"npm run build:share && wrangler dev\\\",\\n\"; if(!s.includes(a)) throw new Error(\"x\");\nfs.writeFileSync(p, s.replace(a, a+\"    \\\"deploy\\\": \\\"npm run build:share && wrangler deploy\\\",\\n\"));' && cd .. && node target/cf/readme.cjs && sed -i 's#`npx wrangler deploy` from `worker/` (it builds nothing itself: run `npm run build -w @app/web` first).#`npm run deploy -w @app/worker` (it rebuilds the site, then runs `wrangler deploy`).#' worker/README.md && grep -n \"npm run deploy\" worker/README.md && cd worker && npx vitest run 2>&1 | grep -E \"×|Tests \"; npx tsc -p . 2>&1 | grep -v \"npm notice\" | tail -3",
+      "isError": false,
+      "text": "     × always rebuilds the site before deploying, so a stale build can't go out 3ms\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n      Tests  1 failed | 5 passed (6)\nok\n45:`npm run deploy -w @app/worker` (it rebuilds the site, then runs `wrangler deploy`). Deploy the site with each app release: `/app/latest.json` follows `published` in `apps/web/src/release.ts`.\n      Tests  98 passed (98)",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "TDD in one command: one test file fails (1 failed | 4 passed), sed fixes it, the full suite passes (98 passed)",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cd \"/c/Users/dev/Documents/code/app/apps/web\" && npx vitest run test/contact.test.ts 2>&1 | grep -E \"×|Tests \"; sed -i 's#export const release: Release = { repo: null, contact: \"hello@app\", published: null, signed: false };#export const release: Release = { repo: \"https://example.com/acme/app\", contact: \"hello@app\", published: null, signed: false };#' src/release.ts && grep -n \"export const release\" src/release.ts && npm run build > ../../target/b.log 2>&1; echo \"build $?\"; npx vitest run > ../../target/w.log 2>&1; grep -E \"×|Tests \" ../../target/w.log | head -5; grep -o 'href=\"https://example.com/acme/app\"' dist/index.html dist/it.html | sort | uniq -c",
+      "isError": false,
+      "text": "     × links the source at example.com/acme/app 3ms\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n      Tests  1 failed | 4 passed (5)\n27:export const release: Release = { repo: \"https://example.com/acme/app\", contact: \"hello@app\", published: null, signed: false };\nbuild 0\n      Tests  428 passed (428)\n      2 dist/index.html:href=\"https://example.com/acme/app\"\n      2 dist/it.html:href=\"https://example.com/acme/app\"",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "TDD in one command: contact test fails, sed fixes release.ts, build, full suite 428 passed",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": ".\\venv\\Scripts\\ruff.exe check bot.py; \"---- ruff (extended rules) ----\"; .\\venv\\Scripts\\ruff.exe check --select ALL bot.py --output-format concise; \"---- basedpyright ----\"; .\\venv\\Scripts\\basedpyright.exe --pythonpath .\\venv\\Scripts\\python.exe bot.py",
+      "isError": false,
+      "text": "All checks passed!\n---- ruff (extended rules) ----\r\nwarning: `incorrect-blank-line-before-class` (D203) and `blank-line-before-class` (D211) are incompatible. Ignoring `incorrect-blank-line-before-class`.\nwarning: `multi-line-summary-first-line` (D212) and `multi-line-summary-second-line` (D213) are incompatible. Ignoring `multi-line-summary-second-line`.\nbot.py:1:1: D100 Missing docstring in public module\nbot.py:1:1: CPY001 Missing copyright notice at top of file\nbot.py:16:5: D103 Missing docstring in public function\nbot.py:21:11: D103 Missing docstring in public function\nbot.py:45:11: D103 Missing docstring in public function\nbot.py:54:11: D103 Missing docstring in public function\nbot.py:64:11: D103 Missing docstring in public function\nbot.py:78:11: D103 Missing docstring in public function\nbot.py:86:5: D103 Missing docstring in public function\nbot.py:93:5: T201 `print` found\nFound 10 errors.\nNo fixes available (1 hidden fix can be enabled with the `--unsafe-fixes` option).\n---- basedpyright ----\r\n0 errors, 0 warnings, 0 notes",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "PowerShell: ruff check passes, ruff --select ALL (exploratory, every rule) finds 10, basedpyright clean",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "$v=\"C:\\Users\\dev\\AppData\\Local\\Temp\\claude\\C--Users-dev-project\\8338a073-9291-4a00-a32b-01ddcdb2bfd1\\scratchpad\\venv\"; & \"$v\\Scripts\\basedpyright.exe\" --pythonpath \"$v\\Scripts\\python.exe\" bot.py; & \"$v\\Scripts\\ruff.exe\" check bot.py; & \"$v\\Scripts\\ruff.exe\" format --check bot.py; & \"$v\\Scripts\\ruff.exe\" check --select ALL bot.py --output-format concise 2>$null | Select-Object -Last 12",
+      "isError": true,
+      "text": "Exit code 1\n0 errors, 0 warnings, 0 notes\nAll checks passed!\nunformatted: File would be reformatted\n  --> bot.py:68:15\n   |\n67 |     code, err = await run(\n   -         \"ssh\", \"-i\", SSH_KEY_PATH, \"-o\", \"StrictHostKeyChecking=no\",\n   -         f\"{SSH_USER}@{WORKSTATION_IP}\", \"shutdown /s /t 0\",\n68 +         \"ssh\",\n69 +         \"-i\",\n70 +         SSH_KEY_PATH,\n71 +         \"-o\",\n72 +         \"StrictHostKeyChecking=no\",\n73 +         f\"{SSH_USER}@{WORKSTATION_IP}\",\n74 +         \"shutdown /s /t 0\",\n75 |         timeout=15,\n   |\n\n1 file would be reformatted\nbot.py:1:1: D100 Missing docstring in public module\r\nbot.py:1:1: CPY001 Missing copyright notice at top of file\r\nbot.py:16:5: D103 Missing docstring in public function\r\nbot.py:21:11: D103 Missing docstring in public function\r\nbot.py:45:11: D103 Missing docstring in public function\r\nbot.py:54:11: D103 Missing docstring in public function\r\nbot.py:64:11: D103 Missing docstring in public function\r\nbot.py:78:11: D103 Missing docstring in public function\r\nbot.py:86:5: D103 Missing docstring in public function\r\nbot.py:93:5: T201 `print` found\r\nFound 10 errors.\r\nNo fixes available (1 hidden fix can be enabled with the `--unsafe-fixes` option).",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "medium",
+      "outcome": "pass"
+    },
+    "note": "PowerShell: basedpyright and ruff check pass, ruff format --check would reformat, then ruff --select ALL: formatting and --select ALL prove nothing, the two real checks passed",
+    "source": "real"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "npx prettier --check .",
+      "isError": true,
+      "text": "Exit code 1\nChecking formatting...\n[warn] src/date.ts\n[warn] Code style issues found in the above file. Run Prettier with --write to fix.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "prettier --check failing proves nothing about correctness",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "ruff format --check .",
+      "isError": true,
+      "text": "Exit code 1\nWould reformat: src/app.py\n1 file would be reformatted, 12 files already formatted",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "ruff format --check failing proves nothing about correctness",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "black --check .",
+      "isError": true,
+      "text": "Exit code 1\nwould reformat src/app.py\n\nOh no! 💥 💔 💥\n1 file would be reformatted, 12 files would be left unchanged.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "black --check failing proves nothing about correctness",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "cargo fmt --check",
+      "isError": true,
+      "text": "Exit code 1\nDiff in /repo/src/date.rs at line 4:\n-fn parse(s:&str)->u32{\n+fn parse(s: &str) -> u32 {",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "cargo fmt --check failing proves nothing about correctness",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "gofmt -l .",
+      "isError": true,
+      "text": "date.go",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "gofmt -l listing a file proves nothing about correctness",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "PowerShell",
+      "command": "dotnet format --verify-no-changes",
+      "isError": true,
+      "text": "Exit code 2\r\nC:\\work\\App\\Date.cs(4,1): error WHITESPACE: Fix whitespace formatting.\r\n",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "dotnet format --verify-no-changes failing proves nothing about correctness",
+    "source": "constructed"
+  }
+]

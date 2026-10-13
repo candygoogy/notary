@@ -1,0 +1,178 @@
+[
+  {
+    "steps": [
+      {
+        "edit": "C:\\work\\app\\src\\date.ts"
+      },
+      {
+        "run": {
+          "tool": "Bash",
+          "command": "npm test",
+          "isError": false,
+          "text": "      Tests  42 passed (42)",
+          "backgrounded": false
+        }
+      },
+      {
+        "edit": "C:\\work\\app\\docs\\STATUS.md"
+      }
+    ],
+    "answer": "All tests pass.",
+    "expect": "verified",
+    "note": "a doc edit after the passing run does not reopen verification",
+    "source": "constructed"
+  },
+  {
+    "steps": [
+      {
+        "edit": "C:\\work\\app\\src\\date.ts"
+      },
+      {
+        "run": {
+          "tool": "Bash",
+          "command": "npm test",
+          "isError": false,
+          "text": "      Tests  42 passed (42)",
+          "backgrounded": false
+        }
+      },
+      {
+        "edit": "C:\\work\\app\\.agent\\PROGRESS.md"
+      },
+      {
+        "edit": "C:\\Users\\dev\\.claude\\projects\\C--work-app\\memory\\MEMORY.md"
+      },
+      {
+        "edit": "C:\\work\\app\\CLAUDE.md"
+      }
+    ],
+    "answer": "**Checked:** all tests pass (231 unit, 36 end-to-end).",
+    "expect": "verified",
+    "note": "replay pattern: progress notes, memory and CLAUDE.md edited after the full suite passed",
+    "source": "constructed"
+  },
+  {
+    "steps": [
+      {
+        "edit": "C:\\work\\app\\src\\date.ts"
+      },
+      {
+        "run": {
+          "tool": "Bash",
+          "command": "npm test",
+          "isError": false,
+          "text": "      Tests  42 passed (42)",
+          "backgrounded": false
+        }
+      },
+      {
+        "edit": "C:\\work\\app\\target\\notes-update.cjs"
+      },
+      {
+        "edit": "C:\\Users\\dev\\AppData\\Local\\Temp\\scrub.py"
+      },
+      {
+        "edit": "C:\\work\\app\\node_modules\\.cache\\tools\\shot.mjs"
+      }
+    ],
+    "answer": "All tests pass.",
+    "expect": "verified",
+    "note": "replay pattern: throwaway helpers in target/, Temp and node_modules/.cache after the passing run",
+    "source": "constructed"
+  },
+  {
+    "steps": [
+      {
+        "edit": "C:\\work\\app\\src\\date.ts"
+      },
+      {
+        "run": {
+          "tool": "Bash",
+          "command": "npm test",
+          "isError": false,
+          "text": "      Tests  42 passed (42)",
+          "backgrounded": false
+        }
+      },
+      {
+        "edit": "C:\\work\\app\\src\\styles\\global.css"
+      }
+    ],
+    "answer": "There's a browser test for it, and the comment tests pass.",
+    "expect": "unverified",
+    "note": "replay true positive: a code edit (CSS) after the passing run still reopens verification",
+    "source": "constructed"
+  },
+  {
+    "steps": [
+      {
+        "edit": "C:\\work\\app\\docs\\STATUS.md"
+      },
+      {
+        "edit": "C:\\work\\app\\README.md"
+      }
+    ],
+    "answer": "I've updated the status doc.",
+    "expect": null,
+    "note": "only docs edited: nothing needs judging",
+    "source": "constructed"
+  },
+  {
+    "steps": [
+      {
+        "edit": "C:\\work\\app\\apps\\web\\src\\release.ts"
+      },
+      {
+        "run": {
+          "tool": "Bash",
+          "command": "npm test -w @app/web",
+          "isError": false,
+          "text": "      Tests  428 passed (428)",
+          "backgrounded": false
+        }
+      },
+      {
+        "run": {
+          "tool": "Bash",
+          "command": "~/.cargo/bin/cargo test --workspace --no-fail-fast",
+          "isError": true,
+          "text": "Exit code 101\ntest result: FAILED. 66 passed; 1 failed; 0 ignored",
+          "backgrounded": false
+        }
+      }
+    ],
+    "answer": "The website tests pass.",
+    "expect": "verified",
+    "note": "replay: a claim scoped to the website tests, judged against a later Rust failure",
+    "source": "constructed"
+  },
+  {
+    "steps": [
+      {
+        "edit": "C:\\work\\editor\\crates\\terminal\\src\\terminal.rs"
+      },
+      {
+        "run": {
+          "tool": "PowerShell",
+          "command": "cargo test -p terminal --lib",
+          "isError": false,
+          "text": "test result: ok. 115 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s",
+          "backgrounded": false
+        }
+      },
+      {
+        "run": {
+          "tool": "PowerShell",
+          "command": "$f = \"crates\\terminal\\src\\terminal.rs\"; $orig = [IO.File]::ReadAllText($f); $mod = $orig.Replace(\"let scroll_lines = if mouse_mode &&\", \"let scroll_lines = if false && mouse_mode &&\"); [IO.File]::WriteAllText($f, $mod); cargo test -p terminal test_mouse_mode_scroll 2>&1 | Select-String -Pattern \"test result|FAILED\"; [IO.File]::WriteAllText($f, $orig); \"restored: \" + ([IO.File]::ReadAllText($f) -eq $orig)",
+          "isError": false,
+          "text": "test terminal::tests::test_mouse_mode_scroll_reports_one_event_per_wheel_notch ... FAILED\ntest result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.01s\nrestored: True",
+          "backgrounded": false
+        }
+      }
+    ],
+    "answer": "**Checks:** 115 terminal tests pass and Windows clippy is clean.",
+    "expect": "verified",
+    "note": "replay 3 (real shape): a mutation check made in the shell (break, run one test, restore) after the passing full suite",
+    "source": "constructed"
+  }
+]
