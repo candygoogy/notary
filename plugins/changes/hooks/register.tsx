@@ -205,9 +205,17 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'changes' }, async $ => {
-    await $.ui.open({ id: PANE.id, title: PANE.title })
+    await openPane($)
     return { text: 'Changes pane opened.' }
   })
+
+  // The band's [Open] shows only while the pane is shut: closing it (the
+  // person's close mark or key) draws the band again.
+  on('ui.close', { id: 'changes' }, async ($, e, next) => {
+    const r = await next(e)
+    $.ui.invalidate('ui.render')
+    return r
+  }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => renderBand($, opts, e, next))
 
@@ -538,7 +546,7 @@ async function showBand($: Engine, opts: Options, session: Session, turnId: stri
     const { value: opened = false } = await $.state.get(AUTO_OPENED)
     if (!opened) {
       await $.state.set(AUTO_OPENED, true)
-      await $.ui.open({ id: PANE.id, title: PANE.title })
+      await openPane($)
     }
   }
 }
@@ -616,7 +624,7 @@ async function renderBand($: Engine, opts: Options, e: Render[1], next: Render[2
   const mine = bandView(
     elements,
     band,
-    () => void openOnTurn($, band.turnId),
+    (await paneIsUp($)) ? null : () => void openOnTurn($, band.turnId),
     () => void $.state.set(BAND, null),
   )
   // Other mods' bands draw beneath ours, never hidden by it, while there is
@@ -634,7 +642,25 @@ async function renderBand($: Engine, opts: Options, e: Render[1], next: Render[2
 
 async function openOnTurn($: Engine, turnId: string): Promise<void> {
   await update($, VIEW, (v = NO_VIEW) => ({ ...v, turnId, node: null, confirm: null, offer: null }))
+  await openPane($)
+}
+
+// Opens the pane, then draws the band again without its [Open].
+async function openPane($: Engine): Promise<void> {
   await $.ui.open({ id: PANE.id, title: PANE.title })
+  $.ui.invalidate('ui.render')
+}
+
+// Whether the pane is open and drawn, by the engine's record: one waiting
+// undrawn (a narrow terminal) still needs the band's [Open]. A tab behind
+// another pane counts as up: no event says when tabs switch.
+async function paneIsUp($: Engine): Promise<boolean> {
+  try {
+    return (await $.ui.panes()).some(pane => pane.id === PANE.id && pane.isPlaced)
+  } catch (error) {
+    debug($, 'panes', error)
+    return false
+  }
 }
 
 async function renderPane($: Engine, opts: Options, e: Render[1], next: Render[2]) {

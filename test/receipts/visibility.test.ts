@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { visibility } from '../../plugins/receipts/hooks/core/visibility.ts'
-import type { Verbosity } from '../../plugins/receipts/hooks/core/visibility.ts'
+import { bandStays, visibility } from '../../plugins/receipts/hooks/core/visibility.ts'
+import type { BandMoment, Verbosity } from '../../plugins/receipts/hooks/core/visibility.ts'
 import type { ClaimKind, VerdictKind } from '../../plugins/receipts/hooks/core/types.ts'
 
 // [verdict, claim kind, carried over, verbosity] → [band, stamp, nudge, sendBackEligible]
@@ -37,3 +37,30 @@ for (const [kind, claimKind, carriedOver, verbosity, [band, stamp, nudge, sendBa
 test('quiet is the default', () => {
   assert.deepEqual(visibility({ kind: 'unverified', claim: { kind: 'generic' } }, false), visibility({ kind: 'unverified', claim: { kind: 'generic' } }, false, 'quiet'))
 })
+
+// [verdict on the band, moment] → still on the band
+const lifetime: Array<[VerdictKind, BandMoment, boolean]> = [
+  // The person's next prompt clears ✅ only.
+  ['verified', { at: 'prompt' }, false],
+  ['unverified', { at: 'prompt' }, true],
+  ['contradicted', { at: 'prompt' }, true],
+  // A turn ends with no verdict of its own, no reminder carried (mode A, or a
+  // prompt from a plugin): everything stays.
+  ['unverified', { at: 'turn-end', reminded: false, judged: false }, true],
+  ['contradicted', { at: 'turn-end', reminded: false, judged: false }, true],
+  ['verified', { at: 'turn-end', reminded: false, judged: false }, true],
+  // Its prompt carried the reminder (mode B): ⚠️ goes, ❌ stays.
+  ['unverified', { at: 'turn-end', reminded: true, judged: false }, false],
+  ['contradicted', { at: 'turn-end', reminded: true, judged: false }, true],
+  // The turn gave a verdict: that one is on the band now and stays.
+  ['unverified', { at: 'turn-end', reminded: true, judged: true }, true],
+  ['contradicted', { at: 'turn-end', reminded: true, judged: true }, true],
+  ['verified', { at: 'turn-end', reminded: true, judged: true }, true],
+]
+
+for (const [kind, moment, stays] of lifetime) {
+  const when = moment.at === 'prompt' ? 'prompt' : `turn end${moment.reminded ? ', reminded' : ''}${moment.judged ? ', judged' : ''}`
+  test(`band: ${kind} at ${when} ${stays ? 'stays' : 'goes'}`, () => {
+    assert.equal(bandStays(kind, moment), stays)
+  })
+}

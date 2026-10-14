@@ -35,6 +35,8 @@ declare module 'claude-code' {
       bandHidden: boolean
       history: HistoryItem[]
       pendingNudge: string | null
+      // The prompt now running carried the reminder (mode B).
+      reminded: boolean
       inactive: boolean
       stamped: string | null
     }

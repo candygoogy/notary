@@ -49,11 +49,13 @@ Every verdict goes into the `/receipts` pane. What reaches you unasked depends o
 
 | Verdict | Band above the prompt | Stamp under the answer | Mode B | Mode C |
 |---|---|---|---|---|
-| ❌ any claim | yes | yes | sent back once | sent back once |
-| ⚠️ tests or build claim, code edited this turn | yes | yes | reminder with your next prompt | sent back once |
+| ❌ any claim | until the next verdict | yes | sent back once | sent back once |
+| ⚠️ tests or build claim, code edited this turn | until the next verdict; in mode B, until Claude has answered the reminder | yes | reminder with your next prompt | sent back once |
 | ⚠️ general claim, or the edit was in an earlier turn | pane only | pane only | nothing | nothing |
 | ✅ tests or build claim | until your next prompt | yes | nothing | nothing |
 | ✅ general claim | pane only | pane only | nothing | nothing |
+
+**Details** on the band opens the `/receipts` pane, and shows only while the pane is shut. **Dismiss** takes the band down at any time; the pane keeps the verdict.
 
 **`all`**: every verdict shows on the band and gets a stamp, and every ⚠️ sends a reminder (mode B) or sends Claude back (mode C). This is how v0.1 behaved before the replay of real sessions showed it was too noisy.
 
@@ -163,6 +165,7 @@ Pester only sets an exit code with `-CI`, so its summary is always read.
 - **Background runs** with no result yet are not evidence (⚠️ until they finish).
 - **Long, mixed sentences** ("Fixed the parser, but the timezone case is left") are skipped unless smart check is on.
 - **Subagents' own reports** aren't judged. Their edits and test runs count toward the main conversation's claims.
+- **Desktop app.** The Code tab doesn't show the stamp line under the answer. The band, the pane and the reminder to Claude work there.
 
 ## Failure is quiet
 

@@ -46,6 +46,13 @@ const FUTURE = /\bwill\s+(?:now\s+)?(?:be|pass|work|succeed)\b|\bgoing\s+to\b|\b
 // ("Fixed, if you want to rerun it").
 const CONDITION =
   /\b(?:if|once|when|whenever|while|unless|until|whether|assuming|as\s+soon\s+as)\b|\bbefore\s+(?:my|the|this|your|our)\s+(?:change|changes|edit|edits|fix|refactor|patch)\b|\bafter\s+(?:you|we)\b/i
+// A success phrase someone did not say, not a report of success: "My last
+// message didn't say the tests passed", "I'm not claiming the build is fixed".
+// Only when the frame leads into the claim within one clause: "I never said
+// otherwise: all tests pass" and "I didn't break anything, all tests pass"
+// still claim.
+const DENIED_REPORT =
+  /(?:\bnot|\bnever|n't)\s+(?:\w+\s+){0,2}?(?:say|said|saying|claim|claimed|claiming|state|stated|stating|tell|told|telling|report|reported|reporting|mean|meant|suggest|suggested|imply|implied|promise|promised|mention|mentioned)\b(?=[^,;:—–]*$)/i
 // An explanation or an introduction, not a report: "Why it works on those two
 // sites:", "Here's how it works:", "This is why the build passes."
 const EXPLANATION = /^(?:why|how|what|here(?:'s|\s+is)\s+(?:why|how|what)|this\s+is\s+(?:why|how)|that's\s+(?:why|how)|the\s+reason)\b/i
@@ -100,7 +107,7 @@ function asClaim(sentence: string, codes: readonly string[]): Claim | null {
   if (at < 0) return null
   if (sentence.endsWith('?')) return null
   if (HEDGE.test(sentence) || DISCLAIMER.test(sentence) || NEGATION.test(sentence) || FUTURE.test(sentence)) return null
-  if (CONDITION.test(sentence.slice(0, at))) return null
+  if (CONDITION.test(sentence.slice(0, at)) || DENIED_REPORT.test(sentence.slice(0, at))) return null
   const words = sentence.split(/\s+/).filter(Boolean).length
   return {
     sentence: sentence.replace(/(\d+)/g, (_, i: string) => `\`${codes[Number(i)]}\``),

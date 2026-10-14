@@ -4,3 +4,5 @@ node_modules/
 .worktrees/
 *.log
 tools/probe/probe-out.log
+# written by Claude Code when it loads a plugin folder (--plugin-dir)
+plugins/*/tsconfig.json

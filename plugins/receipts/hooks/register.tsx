@@ -8,7 +8,7 @@ import { classify } from './core/evidence.ts'
 import { editedSince, emptyLedger, recordEdit, recordRun } from './core/ledger.ts'
 import type { Claim, Mode, Verdict } from './core/types.ts'
 import { decide, judge } from './core/verdict.ts'
-import { visibility } from './core/visibility.ts'
+import { bandStays, visibility } from './core/visibility.ts'
 import type { Verbosity, Visibility } from './core/visibility.ts'
 import { SMART_MAX_TOKENS, SMART_MODEL, SMART_SYSTEM, isYes } from './smartcheck.ts'
 import { ARGUMENT_HINT, DESCRIPTION, USAGE, parseCommand } from './commands.ts'
@@ -33,6 +33,7 @@ const LAST = { plugin: 'receipts', key: 'last' } as const
 const BAND_HIDDEN = { plugin: 'receipts', key: 'bandHidden' } as const
 const HISTORY = { plugin: 'receipts', key: 'history' } as const
 const PENDING_NUDGE = { plugin: 'receipts', key: 'pendingNudge' } as const
+const REMINDED = { plugin: 'receipts', key: 'reminded' } as const
 const INACTIVE = { plugin: 'receipts', key: 'inactive' } as const
 const STAMPED = { plugin: 'receipts', key: 'stamped' } as const
 
@@ -135,9 +136,14 @@ export const register: Register = (on, options) => {
 
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (e.agentId !== undefined || e.reason !== 'answer' || !(await isActive($, opts))) return r
+    if (e.agentId !== undefined || !(await isActive($, opts))) return r
     try {
-      await settle($, opts, e.turnId, e.answer)
+      // The turn of a prompt that carried the reminder ends, answered or not.
+      const { value: reminded = false } = await $.state.get(REMINDED)
+      if (reminded) await $.state.set(REMINDED, false)
+      const judged = e.reason === 'answer' ? await settle($, opts, e.turnId, e.answer) : false
+      const { value: last = null } = await $.state.get(LAST)
+      if (last !== null && !bandStays(last.kind, { at: 'turn-end', reminded, judged })) await $.state.set(LAST, null)
     } catch (error) {
       debug($, 'turn.complete', error)
     }
@@ -164,11 +170,13 @@ export const register: Register = (on, options) => {
     } catch (error) {
       debug($, 'prompt.submit', error)
     }
+    // Marked before the prompt goes on: its turn may end before `next` resolves.
+    if (taken.nudge !== null) await markReminded($, true)
     const r = await next(taken.nudge === null ? e : { ...e, context: [...(e.context ?? []), taken.nudge] })
+    if (taken.nudge !== null && r.drop !== undefined) await markReminded($, false)
     try {
-      // ✅ shows until the person's next prompt; ⚠️ and ❌ stay until the next verdict.
       const { value: last = null } = await $.state.get(LAST)
-      if (last?.kind === 'verified') await $.state.set(LAST, null)
+      if (last !== null && !bandStays(last.kind, { at: 'prompt' })) await $.state.set(LAST, null)
     } catch (error) {
       debug($, 'prompt.submit', error)
     }
@@ -192,6 +200,14 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => (opts.enabled ? renderBand($, e, next) : next(e)))
 
   on('ui.render', { component: 'Pane', requestId: 'receipts' }, ($, e, next) => (opts.enabled ? renderPane($, e, next) : next(e)))
+
+  // The band's [Details] shows only while the pane is shut: closing it (the
+  // person's close mark or key) draws the band again.
+  on('ui.close', { id: 'receipts' }, async ($, e, next) => {
+    const r = await next(e)
+    $.ui.invalidate('ui.render')
+    return r
+  }).catch(($, e, next) => next(e))
 }
 
 type Render = Parameters<Hook<'ui.render'>>
@@ -201,14 +217,14 @@ async function runCommand($: Engine, args: string): Promise<{ text: string }> {
   const plan = parseCommand(args)
   if (plan.kind === 'usage') return { text: USAGE }
   if (plan.kind === 'open') {
-    await $.ui.open({ id: PANE.id, title: PANE.title })
+    await openPane($)
     return { text: 'Receipts pane opened.' }
   }
   const result = await $.config.set({ key: plan.key, value: plan.value })
   return 'deny' in result && result.deny !== undefined ? { text: `Receipts could not change ${plan.key}: ${result.deny}` } : { text: plan.done }
 }
 
-// The band: ⚠️ and ❌ until the next verdict (or [Dismiss]), ✅ until the next prompt.
+// The band, for as long as bandStays (core/visibility.ts) keeps it, or [Dismiss].
 // It shares the space above the prompt: Receipts' row goes first and whatever
 // is beneath (another mod's band, the engine's own) is drawn under it, so
 // neither hides the other. With room for one row only, Receipts' row stands.
@@ -221,7 +237,7 @@ async function renderBand($: Engine, e: Render[1], next: Render[2]) {
   const mine = bandView(
     elements,
     last,
-    () => void $.ui.open({ id: PANE.id, title: PANE.title }),
+    (await paneIsUp($)) ? null : () => void openPane($),
     () => void $.state.set(BAND_HIDDEN, true),
   )
   if (e.props.maxRows < 2) return mine
@@ -233,6 +249,24 @@ async function renderBand($: Engine, e: Render[1], next: Render[2]) {
       {below}
     </Box>
   )
+}
+
+// Opens the pane, then draws the band again without its [Details].
+async function openPane($: Engine): Promise<void> {
+  await $.ui.open({ id: PANE.id, title: PANE.title })
+  $.ui.invalidate('ui.render')
+}
+
+// Whether the pane is open and drawn, by the engine's record: one waiting
+// undrawn (a narrow terminal) still needs the band's [Details]. A tab behind
+// another pane counts as up: no event says when tabs switch.
+async function paneIsUp($: Engine): Promise<boolean> {
+  try {
+    return (await $.ui.panes()).some(pane => pane.id === PANE.id && pane.isPlaced)
+  } catch (error) {
+    debug($, 'panes', error)
+    return false
+  }
 }
 
 async function renderPane($: Engine, e: Render[1], next: Render[2]) {
@@ -287,12 +321,13 @@ async function judgeOnce($: Engine, opts: Options, turnId: string, startSeq: num
 }
 
 // The turn ended with an answer: keep its verdict for the band and the pane,
-// and queue the nudge. The stamp was written at classic.Stop.
-async function settle($: Engine, opts: Options, turnId: string, answer: string): Promise<void> {
+// and queue the nudge. The stamp was written at classic.Stop. Answers whether
+// the turn gave a verdict.
+async function settle($: Engine, opts: Options, turnId: string, answer: string): Promise<boolean> {
   const turn = (await $.state.get(CURRENT_TURN)).value ?? null
   const startSeq = turn !== null && turn.turnId === turnId ? turn.startSeq : 0
   const verdict = await judgeOnce($, opts, turnId, startSeq, answer)
-  if (verdict === null) return
+  if (verdict === null) return false
   const shown = await shownFor($, opts, verdict, startSeq)
   const at = await $.clock.now()
   // A newer verdict replaces the band's, shown or not.
@@ -300,6 +335,16 @@ async function settle($: Engine, opts: Options, turnId: string, answer: string):
   await $.state.set(BAND_HIDDEN, false)
   await update($, HISTORY, (history = []) => [...history, { turnId, at, verdict }].slice(-HISTORY_LIMIT))
   await $.state.set(PENDING_NUDGE, shown.nudge ? decide(verdict, opts.mode, true, true).nudge : null)
+  return true
+}
+
+// Whether the prompt now entering carried the reminder (a refused one did not).
+async function markReminded($: Engine, reminded: boolean): Promise<void> {
+  try {
+    await $.state.set(REMINDED, reminded)
+  } catch (error) {
+    debug($, 'prompt.submit', error)
+  }
 }
 
 // What this verdict shows (core/visibility.ts): carried over when no code edit
@@ -377,6 +422,8 @@ async function stampOnce($: Engine, key: string, text: string): Promise<void> {
 async function clearStale($: Engine): Promise<void> {
   const { value: nudge = null } = await $.state.get(PENDING_NUDGE)
   if (nudge !== null) await $.state.set(PENDING_NUDGE, null)
+  const { value: reminded = false } = await $.state.get(REMINDED)
+  if (reminded) await $.state.set(REMINDED, false)
   const { value: last = null } = await $.state.get(LAST)
   if (last !== null) await $.state.set(LAST, null)
 }
@@ -388,6 +435,7 @@ async function resetConversation($: Engine): Promise<void> {
   await $.state.set(SENT_BACK, [])
   await $.state.set(LAST, null)
   await $.state.set(PENDING_NUDGE, null)
+  await $.state.set(REMINDED, false)
   await $.state.set(STAMPED, null)
 }
 

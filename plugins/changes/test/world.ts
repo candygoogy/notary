@@ -44,10 +44,18 @@ export function world(on: On, { trackShell = false, expectLogs = false } = {}) {
   })
   on('fs.list', () => ({ value: [] }) as never)
   const opened: string[] = []
+  // The engine's record of the open panes, as `$.ui.panes()` lists them.
+  const panes = new Map<string, { id: string; title: string; isShown: boolean; isFocused: boolean; isPlaced: boolean }>()
   on('ui.open', (_$, e) => {
     opened.push(e.id)
+    panes.set(e.id, { id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: true })
     return { value: { isPlaced: true } } as never
   })
+  on('ui.close', (_$, e) => {
+    panes.delete(e.id)
+    return { value: undefined } as never
+  })
+  on('ui.panes', () => ({ value: [...panes.values()] }) as never)
   // PowerShell as the restore runs it: replace or move the temp file into
   // place, remove a file. Git and everything else fail (no repository here).
   on('process.run', (_$, e) => {
@@ -84,7 +92,7 @@ export function world(on: On, { trackShell = false, expectLogs = false } = {}) {
   const session = mock.session(on)
 
   const last = (key: string) => [...writes].reverse().find(w => w.key === key)?.value as any
-  return { files, writes, runs, last, trackShell, session, clock, refuse, logs, opened }
+  return { files, writes, runs, last, trackShell, session, clock, refuse, logs, opened, panes }
 }
 
 export const PATH = 'C:/work/src/a.ts'
@@ -97,8 +105,8 @@ export function editingTool(on: On, w: ReturnType<typeof world>) {
   })
 }
 
-export async function editTurn($: Engine, turnId = 't1') {
-  await $.turn.start({ text: 'fix a', turnId })
+export async function editTurn($: Engine, turnId = 't1', text = 'fix a') {
+  await $.turn.start({ text, turnId })
   await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'before', new_string: 'after' })
   await $.turn.complete({ answer: 'Done.', durationMs: 5, isAborted: false, turnId, reason: 'answer' })
 }

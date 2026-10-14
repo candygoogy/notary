@@ -1,6 +1,7 @@
 import type { Elements, RenderSurface } from 'claude-code'
 
 import { shownPath } from '../core/paths.ts'
+import { turnTitle } from '../core/title.ts'
 import type { FileChange, TimelineNode, TimelineRow } from '../core/timeline.ts'
 
 type PaneElements = Pick<Elements[RenderSurface], 'Box' | 'Button' | 'Text' | 'Code'>
@@ -126,7 +127,7 @@ export function paneView({ Box, Button, Text, Code }: PaneElements, input: PaneI
         }
         const { turn, files, nodes, untracked } = row
         const isOpen = turn.turnId === input.selected
-        const title = turn.kind === 'background' ? `background agent ${turn.turnId.slice('background:'.length, 'background:'.length + 8)}` : `#${turn.ordinal} ${JSON.stringify(turn.prompt.slice(0, 60))}`
+        const title = turn.kind === 'background' ? `background agent ${turn.turnId.slice('background:'.length, 'background:'.length + 8)}` : `#${turn.ordinal} ${turnTitle(turn.prompt)}`
         return (
           <Box key={`turn-${turn.turnId}`} flexDirection="column">
             <Button key={`select-${turn.turnId}`} plain label={`${isOpen ? '▾' : '▸'} ${title} · ${files.length} ${files.length === 1 ? 'file' : 'files'}`} onPress={() => input.onSelect(turn.turnId)} />

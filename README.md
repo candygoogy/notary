@@ -79,7 +79,7 @@ Receipts judges a turn when Claude's final answer claims success and code has ch
 | Verdict | When | What you see by default |
 |---|---|---|
 | ❌ **Contradicted** | The latest check after the last edit failed, and nothing passed after it. | A band above the prompt and a stamp under the answer, and Claude is sent back once to fix it. `🧾 ❌ Contradicted: "All tests pass." · npm test exited 1 (1 failed)` |
-| ⚠️ **Unverified** | A claim about tests or the build, after code edits in this turn, with no check since (or only one still running, or one that found no tests). | Band and stamp, and a reminder goes to Claude with your next prompt. `🧾 ⚠️ Unverified: no receipts · no check ran after the last edit` |
+| ⚠️ **Unverified** | A claim about tests or the build, after code edits in this turn, with no check since (or only one still running, or one that found no tests). | Band and stamp, and a reminder goes to Claude with your next prompt. The band goes once Claude has answered it. `🧾 ⚠️ Unverified: no receipts · no check ran after the last edit` |
 | ✅ **Verified** | The latest check after the last edit passed. | For answers about tests or the build: a stamp, and the band until your next prompt. `🧾 ✅ Verified · npm test passed (42)` |
 
 A check that failed and then passed counts as ✅.

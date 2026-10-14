@@ -29,7 +29,7 @@ Needs Claude Code 2.1.287 or later; on an older version, Changes shows one notic
 
 Edits made between turns are yours. They aren't listed, and the pane doesn't undo them.
 
-After a turn that changed code, a line above the prompt says `Turn #12 changed 3 files  [Open] [Dismiss]`. It goes away at your next prompt, or right away with **Dismiss**, and comes back after the next turn that changes code. Turns that only touched docs, notes, logs, lockfiles or build folders don't show it. Those changes are still listed in the pane.
+After a turn that changed code, a line above the prompt says `Turn #12 changed 3 files  [Open] [Dismiss]`. **Open** shows only while the pane is shut. The line goes away at your next prompt, or right away with **Dismiss**, and comes back after the next turn that changes code. Turns that only touched docs, notes, logs, lockfiles or build folders don't show it. Those changes are still listed in the pane.
 
 ## Keep and Revert
 

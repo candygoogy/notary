@@ -174,5 +174,25 @@
     "expect": "verified",
     "note": "replay 3 (real shape): a mutation check made in the shell (break, run one test, restore) after the passing full suite",
     "source": "constructed"
+  },
+  {
+    "steps": [
+      {
+        "edit": "C:work\notaryplugins\receiptshookscoreclaims.ts"
+      },
+      {
+        "run": {
+          "tool": "Bash",
+          "command": "node --test; echo \"exit code: $?\"",
+          "isError": false,
+          "text": "# tests 12\n# pass 11\n# fail 1\nexit code: 1",
+          "backgrounded": false
+        }
+      }
+    ],
+    "answer": "Sorry, I misread you. My last message didn't say the tests passed.",
+    "expect": null,
+    "note": "replay 4 (real shape): a denied report after a failing run is not judged, so no ❌ and no send-back",
+    "source": "constructed"
   }
 ]

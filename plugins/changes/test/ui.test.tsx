@@ -325,6 +325,51 @@ test('autoOpen off (the default) never opens the pane', { options: { trackShell:
   expect(w.opened).toEqual([])
 })
 
+test("the band's Open shows only while the pane is shut", { options: { trackShell: false } }, async ($, on) => {
+  const w = world(on)
+  engineDraws(on)
+  editingTool(on, w)
+  w.files.set(PATH, 'before\n')
+  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true } as never)
+  const band = await mountBand($, 'terminal')
+  await editTurn($)
+  await band.press({ key: 'open' })
+  expect(w.opened).toEqual(['changes'])
+  expect((await band.find({ key: 'changes-band' }))?.text).toContain('Turn #1 changed 1 file')
+  expect(await band.find({ key: 'open' })).toBeUndefined()
+  expect(await band.find({ key: 'hide' })).toBeDefined()
+  // The person closes the pane (a test's `$` can't raise ui.close, whose hook
+  // redraws the band); the band's next draw offers Open again.
+  w.panes.delete('changes')
+  w.files.set(PATH, 'before\n')
+  await editTurn($, 't2')
+  expect((await band.find({ key: 'changes-band' }))?.text).toContain('Turn #2 changed 1 file')
+  expect(await band.find({ key: 'open' })).toBeDefined()
+})
+
+test('a pane waiting undrawn on a narrow terminal keeps the band\'s Open', { options: { trackShell: false } }, async ($, on) => {
+  const w = world(on)
+  engineDraws(on)
+  editingTool(on, w)
+  w.files.set(PATH, 'before\n')
+  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true } as never)
+  w.panes.set('changes', { id: 'changes', title: 'Changes', isShown: false, isFocused: false, isPlaced: false })
+  const band = await mountBand($, 'terminal')
+  await editTurn($)
+  expect(await band.find({ key: 'open' })).toBeDefined()
+})
+
+test('a turn is titled by its prompt on one line, cut at a word', { options: { trackShell: false } }, async ($, on) => {
+  const w = world(on)
+  engineDraws(on)
+  editingTool(on, w)
+  w.files.set(PATH, 'before\n')
+  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true } as never)
+  await editTurn($, 't1', 'Fix "a" in src/a.ts,\nthen run the tests and tell me what failed and why it failed')
+  const pane = await mountPane($, 'terminal')
+  expect((await pane.find({ key: 'select-t1' }))?.text).toContain('#1 "Fix "a" in src/a.ts, then run the tests and tell me what…" · 1 file')
+})
+
 test('/changes opens the pane', { options: { trackShell: false } }, async ($, on) => {
   world(on)
   await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true } as never)

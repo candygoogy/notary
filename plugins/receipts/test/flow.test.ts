@@ -65,6 +65,59 @@ test('mode B nudges an unverified claim with the next user prompt only', async (
   expect(after.context ?? []).toEqual([])
 })
 
+// The band's verdict after each state write, as renderBand reads it.
+const band = (w: { writes: Array<{ key: string; value: unknown }> }) => w.writes.filter(write => write.key === 'last').at(-1)?.value ?? null
+
+test('mode B: the ⚠️ band goes when the turn its reminder rode on ends', async ($, on) => {
+  const w = world(on)
+  await $.turn.start({ text: 'fix it', turnId: 't1' })
+  await $.tool.call(edit)
+  await answer($, 'All tests pass.')
+  expect(band(w)).toEqual(unverified)
+  const next = await $.prompt.submit({ text: 'did you run them?', wait: false, origin: composer })
+  expect(next.context).toEqual([nudgeText(unverified)])
+  expect(band(w)).toEqual(unverified)
+  await $.turn.start({ text: 'did you run them?', turnId: 't2' })
+  await answer($, 'No, I did not run them yet.', 't2')
+  expect(band(w)).toBeNull()
+})
+
+test('mode B: an interrupted reminder turn also takes the ⚠️ band down', async ($, on) => {
+  const w = world(on)
+  await $.turn.start({ text: 'fix it', turnId: 't1' })
+  await $.tool.call(edit)
+  await answer($, 'All tests pass.')
+  await $.prompt.submit({ text: 'did you run them?', wait: false, origin: composer })
+  await $.turn.start({ text: 'did you run them?', turnId: 't2' })
+  await $.turn.complete({ answer: '', durationMs: 5, isAborted: true, turnId: 't2', reason: 'aborted' })
+  expect(band(w)).toBeNull()
+})
+
+test('mode B: a newer verdict in the reminder turn takes the band', async ($, on) => {
+  const w = world(on)
+  await $.turn.start({ text: 'fix it', turnId: 't1' })
+  await $.tool.call(edit)
+  await answer($, 'All tests pass.')
+  await $.prompt.submit({ text: 'run them', wait: false, origin: composer })
+  await $.turn.start({ text: 'run them', turnId: 't2' })
+  w.answers.push(passing)
+  await $.tool.call(npmTest)
+  await answer($, 'All tests pass.', 't2')
+  expect((band(w) as Verdict | null)?.kind).toBe('verified')
+})
+
+test('mode B: without a reminder the ⚠️ band stays past a quiet turn', async ($, on) => {
+  const w = world(on)
+  await $.turn.start({ text: 'fix it', turnId: 't1' })
+  await $.tool.call(edit)
+  await answer($, 'All tests pass.')
+  // A plugin's prompt carries no reminder, so its turn leaves the band.
+  await $.prompt.submit({ text: 'auto', wait: false, origin: { kind: 'plugin', name: 'other' } as never })
+  await $.turn.start({ text: 'auto', turnId: 't2' })
+  await answer($, 'Looking.', 't2')
+  expect(band(w)).toEqual(unverified)
+})
+
 test('a prompt a plugin submitted gets no nudge, and the nudge waits', async ($, on) => {
   world(on)
   await $.turn.start({ text: 'fix it', turnId: 't1' })
@@ -130,6 +183,17 @@ test('mode A warns without sending back or nudging', { options: { mode: 'A' } },
   expect(w.stamps()).toEqual([stampText(contradicted)])
   const next = await $.prompt.submit({ text: 'ok', wait: false, origin: composer })
   expect(next.context ?? []).toEqual([])
+})
+
+test('mode A: the ⚠️ band stays until the next verdict', { options: { mode: 'A' } }, async ($, on) => {
+  const w = world(on)
+  await $.turn.start({ text: 'fix it', turnId: 't1' })
+  await $.tool.call(edit)
+  await answer($, 'All tests pass.')
+  await $.prompt.submit({ text: 'ok', wait: false, origin: composer })
+  await $.turn.start({ text: 'ok', turnId: 't2' })
+  await answer($, 'Sure.', 't2')
+  expect(band(w)).toEqual(unverified)
 })
 
 test('mode C sends an unverified claim back', { options: { mode: 'C' } }, async ($, on) => {

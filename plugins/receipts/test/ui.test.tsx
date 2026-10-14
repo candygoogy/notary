@@ -28,15 +28,23 @@ function screen(on: On) {
     const { Box } = $.ui.resolve(e)
     return <Box key="engine" />
   })
+  // The engine's record of the open panes, as `$.ui.panes()` lists them.
+  const panes = new Map<string, { id: string; title: string; isShown: boolean; isFocused: boolean; isPlaced: boolean }>()
   on('ui.open', (_$, e) => {
     opened.push(e.id)
+    panes.set(e.id, { id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: true })
     return { value: { isPlaced: true } } as never
   })
+  on('ui.close', (_$, e) => {
+    panes.delete(e.id)
+    return { value: undefined } as never
+  })
+  on('ui.panes', () => ({ value: [...panes.values()] }) as never)
   on('config.set', (_$, e) => {
     settings.push({ key: e.key, value: e.value })
     return { value: e.value } as never
   })
-  return { opened, settings }
+  return { opened, settings, panes }
 }
 
 function mountBand($: Engine, surface: Surface) {
@@ -87,6 +95,31 @@ for (const surface of SURFACES) {
     const band = await mountBand($, surface)
     await band.press({ key: 'details' })
     expect(s.opened).toEqual(['receipts'])
+  })
+
+  test(`${surface}: [Details] shows only while the pane is shut`, { options: { mode: 'A' } }, async ($, on) => {
+    const w = world(on)
+    const s = screen(on)
+    await contradictedTurn($, w)
+    const band = await mountBand($, surface)
+    await band.press({ key: 'details' })
+    expect((await band.find({ key: 'band' }))?.text).toContain('❌ Contradicted')
+    expect(await band.find({ key: 'details' })).toBeUndefined()
+    expect(await band.find({ key: 'hide' })).toBeDefined()
+    // The person closes the pane (a test's `$` can't raise ui.close, whose
+    // hook redraws the band); the band's next draw offers Details again.
+    s.panes.delete('receipts')
+    await band.redraw()
+    expect(await band.find({ key: 'details' })).toBeDefined()
+  })
+
+  test(`${surface}: a pane waiting undrawn keeps the band's [Details]`, { options: { mode: 'A' } }, async ($, on) => {
+    const w = world(on)
+    const s = screen(on)
+    s.panes.set('receipts', { id: 'receipts', title: 'Receipts', isShown: false, isFocused: false, isPlaced: false })
+    await contradictedTurn($, w)
+    const band = await mountBand($, surface)
+    expect(await band.find({ key: 'details' })).toBeDefined()
   })
 
   test(`${surface}: ✅ shows until the next prompt`, async ($, on) => {
