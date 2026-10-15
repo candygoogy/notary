@@ -109,7 +109,7 @@ Claude Code's built-in `/diff` shows the working tree's git diff. Changes is per
 
 ## Limits
 
-- **One conversation at a time.** `/clear` and `/resume` start the Changes history fresh; your files are untouched. So does a new session or `claude --resume`. Turns from before can't be reverted from the pane.
+- **History is kept for `keepHistoryDays`.** A new session and `/clear` start an empty pane. A resumed conversation brings its earlier turns back (see Resumed conversations). After `keepHistoryDays` (7 by default), or sooner if all kept conversations pass 1 GB, a conversation's history is deleted and its turns can't be reverted from the pane. Your files are untouched.
 - **Per file, not per change.** Revert puts the whole file back to before the turn. You can't keep one hunk and revert another.
 - **Shell changes only in git.** Outside a git repository, and in gitignored files, changes made by shell commands aren't seen.
   - A rename shows as a delete plus a new file.

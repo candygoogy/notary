@@ -59,7 +59,7 @@ The built-in `/diff` shows the working tree's git diff. Changes works per turn a
 
 ### Limits
 
-- **One conversation.** `/clear`, `/resume` and a new session start the history fresh. Your files are untouched, but earlier turns can't be reverted from the pane.
+- **History is kept for 7 days.** A new session and `/clear` start an empty pane. Resume a conversation within 7 days of last using it (`keepHistoryDays`) and its earlier turns come back. After that its history is deleted (sooner if all kept history passes 1 GB), and those turns can't be reverted from the pane. Your files are untouched.
 - **Per file, not per hunk.** Revert puts the whole file back.
 - **Shell commands only in git.** Files changed by Bash or PowerShell commands are seen only inside a git repository, and not when gitignored.
 - **No merging.** If the file changed after Claude's edit, Revert refuses rather than guess.
