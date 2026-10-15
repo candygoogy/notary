@@ -1,6 +1,6 @@
 {
   "name": "changes",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "See what Claude changed, turn by turn. Keep it or send it back. A per-turn timeline with each file's diff and keep/revert.",
   "author": { "name": "Notary contributors" },
   "license": "MIT",
@@ -13,6 +13,7 @@
     "band": { "type": "boolean", "title": "Band", "description": "After a turn that changed code, a line above the prompt with an [Open] button. Docs, notes and lockfiles never show it.", "default": true },
     "autoOpen": { "type": "boolean", "title": "Open by itself", "description": "Open the pane when the first turn with code changes ends, if the layout docks panes and the terminal is wide.", "default": false },
     "tellClaude": { "type": "boolean", "title": "Tell Claude about reverts", "description": "After a revert, add a hidden note so Claude knows the file changed back.", "default": true },
-    "trackShell": { "type": "boolean", "title": "Track shell writes", "description": "In a git repository, find files that Bash and PowerShell commands changed, by git status before and after.", "default": true }
+    "trackShell": { "type": "boolean", "title": "Track shell writes", "description": "In a git repository, find files that Bash and PowerShell commands changed, by git status before and after.", "default": true },
+    "keepHistoryDays": { "type": "number", "title": "Keep history (days)", "description": "How many days the copies of changed files and the history are kept after a conversation was last used, so a resumed conversation can still revert. 0 deletes them at the end of each session.", "default": 7 }
   }
 }

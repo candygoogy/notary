@@ -30,10 +30,19 @@ function screen(on: On) {
   })
   // The engine's record of the open panes, as `$.ui.panes()` lists them.
   const panes = new Map<string, { id: string; title: string; isShown: boolean; isFocused: boolean; isPlaced: boolean }>()
+  // What the engine answers an open: drawn, or waiting with its reason (set
+  // `placement.reason` to make the next opens wait).
+  const placement: { reason: string | null } = { reason: null }
+  const toasts: string[] = []
   on('ui.open', (_$, e) => {
     opened.push(e.id)
-    panes.set(e.id, { id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: true })
-    return { value: { isPlaced: true } } as never
+    const isPlaced = placement.reason === null
+    panes.set(e.id, { id: e.id, title: e.title ?? e.id, isShown: isPlaced, isFocused: false, isPlaced })
+    return { value: isPlaced ? { isPlaced: true } : { isPlaced: false, reason: placement.reason } } as never
+  })
+  on('ui.toast', (_$, e) => {
+    toasts.push(e.text)
+    return { value: undefined } as never
   })
   on('ui.close', (_$, e) => {
     panes.delete(e.id)
@@ -44,8 +53,10 @@ function screen(on: On) {
     settings.push({ key: e.key, value: e.value })
     return { value: e.value } as never
   })
-  return { opened, settings, panes }
+  return { opened, settings, panes, placement, toasts }
 }
+
+const WAITS = 'the window is 80 columns wide; widen it to 110'
 
 function mountBand($: Engine, surface: Surface) {
   return $.ui.mount({ plugin: 'receipts', surface, component: 'AbovePrompt', props: BAND_PROPS as never })
@@ -111,6 +122,37 @@ for (const surface of SURFACES) {
     s.panes.delete('receipts')
     await band.redraw()
     expect(await band.find({ key: 'details' })).toBeDefined()
+  })
+
+  test(`${surface}: [Details] on a pane that waits undrawn says why, once`, { options: { mode: 'A' } }, async ($, on) => {
+    const w = world(on)
+    const s = screen(on)
+    await contradictedTurn($, w)
+    s.placement.reason = WAITS
+    const band = await mountBand($, surface)
+    await band.press({ key: 'details' })
+    expect(s.toasts).toEqual([`Receipts pane is ready but not shown yet: ${WAITS}.`])
+  })
+
+  test(`${surface}: [Details] on a pane that is drawn says nothing`, { options: { mode: 'A' } }, async ($, on) => {
+    const w = world(on)
+    const s = screen(on)
+    await contradictedTurn($, w)
+    const band = await mountBand($, surface)
+    await band.press({ key: 'details' })
+    expect(s.opened).toEqual(['receipts'])
+    expect(s.toasts).toEqual([])
+  })
+
+  test(`${surface}: /receipts answers why the pane waits, or that it opened`, async ($, on) => {
+    const s = screen(on)
+    s.placement.reason = WAITS
+    const waiting = await $.command.run({ command: 'receipts', args: '', origin: composer, presentation: {} as never })
+    expect(waiting.text).toBe(`Receipts pane is ready but not shown yet: ${WAITS}.`)
+    s.placement.reason = null
+    const drawn = await $.command.run({ command: 'receipts', args: '', origin: composer, presentation: {} as never })
+    expect(drawn.text).toBe('Receipts pane opened.')
+    expect(s.toasts).toEqual([])
   })
 
   test(`${surface}: a pane waiting undrawn keeps the band's [Details]`, { options: { mode: 'A' } }, async ($, on) => {
@@ -250,4 +292,25 @@ test('with room for one row only, Receipts draws its own row', { options: { mode
   const band = await $.ui.mount({ plugin: 'receipts', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND_PROPS, maxRows: 1 } as never })
   expect(await band.find({ key: 'band' })).toBeDefined()
   expect(await band.find({ key: 'engine' })).toBeUndefined()
+})
+
+const run = ($: Engine, args: string) => $.command.run({ command: 'receipts', args, origin: composer, presentation: {} as never })
+
+test('/receipts check add, list and remove write the checks setting', { options: { checks: ['build: make ci'] } }, async ($, on) => {
+  const s = screen(on)
+  expect((await run($, 'checks')).text).toBe('Receipts checks:\n  build: make ci')
+  expect((await run($, 'check add "pnpm verify" tests')).text).toBe('Receipts now counts pnpm verify as a test check.')
+  expect(s.settings).toEqual([{ key: 'receipts.checks', value: ['build: make ci', 'tests: pnpm verify'] }])
+  expect((await run($, 'check remove make ci')).text).toBe('Receipts no longer counts make ci as a check.')
+  expect(s.settings.at(-1)).toEqual({ key: 'receipts.checks', value: [] })
+  expect((await run($, 'check remove nope')).text).toBe('No check named nope.')
+  expect((await run($, 'check add pnpm verify')).text).toBe(USAGE)
+})
+
+test('a check entry in neither form is named once, at session start', { options: { checks: ['pnpm verify'] } }, async ($, on) => {
+  const s = screen(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.version', () => ({ value: { version: '2.1.296', base: '2.1.296', builtAt: '' } }) as never)
+  await $.session.start({ cwd: 'C:/work', surface: null, isInteractive: false })
+  expect(s.toasts).toEqual(['Receipts ignored a check not written as "tests: <command>" or "build: <command>": pnpm verify'])
 })

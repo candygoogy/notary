@@ -6,7 +6,7 @@
 
 import { normalizeNewlines, stripAnsi } from '../shared/ansi.ts'
 import { COMMAND_CHARS, truncate } from './text.ts'
-import type { Evidence, RunInput, Strength } from './types.ts'
+import type { DeclaredCheck, Evidence, RunInput, Strength } from './types.ts'
 
 const OUTPUT_CHARS = 65_536
 
@@ -152,12 +152,14 @@ const READER = /^(?:cat|type|less|more|head|tail|grep|rg|findstr|awk|sed|get-con
 // The run never finished: a timeout, an interrupt, or a call the person turned down.
 const NOT_FINISHED = /\bCommand timed out\b|\btimed out after\b|\bInterrupted by user\b|\[Request interrupted|\bdoesn't want to proceed with this tool use\b|\btool use was rejected\b/i
 
-export function classify(run: RunInput): Evidence {
+// `checks`: commands the person declared as checks (core/checks.ts), read as
+// a test run (tests) or a build run (build) where nothing built in is stronger.
+export function classify(run: RunInput, checks: readonly DeclaredCheck[] = []): Evidence {
   const segments = split(run.command)
   // The last of the strongest segments decides: in `a; npm test; echo $?` that is the run whose status is shown.
   let best: { index: number; strength: Strength } = { index: -1, strength: 'none' }
   for (const [index, segment] of segments.entries()) {
-    const strength = strengthOf(segment.text)
+    const strength = strengthOf(segment.text, checks)
     if (strength !== 'none' && rank(strength) >= rank(best.strength)) best = { index, strength }
   }
   const whole = normalizeNewlines(stripAnsi(run.text.length > OUTPUT_CHARS ? run.text.slice(-OUTPUT_CHARS) : run.text))
@@ -202,7 +204,7 @@ export function classify(run: RunInput): Evidence {
   const runnerSpoke = summaries.length > 0 || isZero || TEST_FAIL_MARKERS.some(pattern => pattern.test(out))
   const before = stepsBefore(run.command, segments, best.index)
   if (run.isError && best.strength === 'strong' && before.length > 0 && !runnerSpoke) {
-    const build = before.findLast(segment => strengthOf(segment.text) !== 'none')
+    const build = before.findLast(segment => strengthOf(segment.text, checks) !== 'none')
     const errorCount = largest(out, ERROR_COUNTS)
     const buildMarker = BUILD_FAIL_MARKERS.map(pattern => pattern.exec(out)?.[0].trim()).find(found => found !== undefined)
     if (build === undefined || (errorCount === 0 && buildMarker === undefined)) return result('fail', `${shown}: did not run`, 'none')
@@ -210,7 +212,7 @@ export function classify(run: RunInput): Evidence {
     const buildShown = truncate(buildCommand, COMMAND_CHARS)
     const head = exitCode !== null && exitCode !== '0' ? `${buildShown} exited ${exitCode}` : `${buildShown} failed`
     const detail = errorCount > 0 ? `${errorCount} error${errorCount === 1 ? '' : 's'}` : truncate(buildMarker ?? '', COMMAND_CHARS)
-    return { strength: strengthOf(build.text), outcome: 'fail', command: buildCommand, summary: `${head} (${detail})` }
+    return { strength: strengthOf(build.text, checks), outcome: 'fail', command: buildCommand, summary: `${head} (${detail})` }
   }
 
   // A runner's own summary that reports failures is its verdict, whatever the
@@ -245,6 +247,22 @@ export function classify(run: RunInput): Evidence {
   const toolPass = TOOL_PASS_LINES[coreOf(segments[best.index].text).split(/\s+/)[0]]
   if (best.strength === 'medium' && toolPass !== undefined && toolPass.test(out)) return result('pass', `${shown} passed`)
   return result('pass', `${shown}: exit code hidden`, 'none')
+}
+
+// A medium run that is no build: a request to a local server.
+const PROBE = /^(?:curl|wget|iwr|irm|invoke-webrequest|invoke-restmethod)\b/
+
+// What a command checks, in a claim's words: a test runner backs a tests
+// claim; a build, type or lint tool a build claim; anything else, nothing.
+// For "`npm test` passes", whose subject is the command itself.
+export function checkKindOf(command: string, checks: readonly DeclaredCheck[] = []): 'tests' | 'build' | null {
+  let kind: 'tests' | 'build' | null = null
+  for (const segment of split(command)) {
+    const strength = strengthOf(segment.text, checks)
+    if (strength === 'strong') return 'tests'
+    if (strength === 'medium' && !PROBE.test(coreOf(segment.text))) kind = 'build'
+  }
+  return kind
 }
 
 function runnerSummaries(out: string): string[] {
@@ -299,12 +317,28 @@ function stepsBefore(command: string, segments: Segment[], index: number): Segme
   return steps
 }
 
-function strengthOf(segment: string): Strength {
+function strengthOf(segment: string, checks: readonly DeclaredCheck[] = []): Strength {
   const core = coreOf(segment)
   if (core === '' || NOT_A_RUN.test(core) || FORMAT_ONLY.test(core)) return 'none'
-  if (STRONG.some(pattern => pattern.test(core))) return 'strong'
-  if (MEDIUM.some(pattern => pattern.test(core))) return 'medium'
-  return 'none'
+  const builtIn: Strength = STRONG.some(pattern => pattern.test(core)) ? 'strong' : MEDIUM.some(pattern => pattern.test(core)) ? 'medium' : 'none'
+  const declared = declaredStrength(core, checks)
+  // A declared check only ever raises a run's weight; what the run says
+  // (exit code, summary) decides its outcome either way.
+  return rank(declared) > rank(builtIn) ? declared : builtIn
+}
+
+// A declared check matches the command it names and that command with more
+// arguments, after the same wrappers come off both (`timeout 300 pnpm verify --ci`
+// is `pnpm verify`), never a longer word (`pnpm verifyx`).
+function declaredStrength(core: string, checks: readonly DeclaredCheck[]): Strength {
+  let strength: Strength = 'none'
+  for (const check of checks) {
+    const prefix = coreOf(check.prefix)
+    if (prefix === '' || (core !== prefix && !core.startsWith(`${prefix} `))) continue
+    const own: Strength = check.kind === 'tests' ? 'strong' : 'medium'
+    if (rank(own) > rank(strength)) strength = own
+  }
+  return strength
 }
 
 // The segment reduced to the tool that runs and its arguments, lower-cased:
@@ -318,7 +352,7 @@ function coreOf(segment: string): string {
     core = core
       .replace(/^(?:[a-z_]\w*=(?:"[^"]*"|'[^']*'|\S*)\s+)+/, '')
       .replace(/^(?:cmd(?:\.exe)?\s+\/c\s+|&\s+|call\s+|time\s+|env\s+|command\s+|exec\s+)/, '')
-      .replace(/^timeout\s+(?:-\S+\s+)*\d+(?:\.\d+)?[smhd]?\s+/, '')
+      .replace(/^g?timeout\s+(?:(?:-[ks]|--kill-after|--signal)\s+\S+\s+|-\S+\s+)*\d+(?:\.\d+)?[smhd]?\s+/, '')
       // Workspace and output flags between the package manager and its script.
       .replace(/^(npm|pnpm|yarn|bun)\s+(?:(?:-r|--recursive|-s|--silent|--if-present|-ws|--workspaces|(?:--prefix|-C|--dir|--filter|-F|-w|--workspace)(?:=|\s+)\S+)\s+)+/, '$1 ')
       .replace(/^make\s+(?:(?:-j\d*|--jobs(?:=\d+)?|-k|-s|-C\s+\S+)\s+)+/, 'make ')

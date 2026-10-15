@@ -820,7 +820,7 @@
       "tool": "Bash",
       "command": "cd \"/c/Users/dev/Desktop/work/dns-core\" && K=\"/c/Users/dev/Desktop/work/tools/vms/dns/id_ed25519\"; S=\"ssh -q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i $K -p 2222 someone@example.com\"; tar -cf - . | $S 'rm -rf ~/dns-core && mkdir ~/dns-core && tar -xf - -C ~/dns-core && cd ~/dns-core && git -c core.autocrlf=false status --short && git -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qam \"wip test\" && git log --oneline -2 && echo \"--- shellcheck\" && shellcheck -x \"automated install/basic-install.sh\" advanced/Scripts/update.sh && echo shellcheck-clean'",
       "isError": true,
-      "text": "Exit code 255\nWarning: Identity file /c/Users/dev/Desktop/Diagnostic not accessible: No such file or directory.",
+      "text": "Exit code 255\nWarning: Identity file /c/Users/dev/Desktop/work not accessible: No such file or directory.",
       "backgrounded": false
     },
     "expect": {
@@ -2062,6 +2062,65 @@
       "strength": "none"
     },
     "note": "dotnet format --verify-no-changes failing proves nothing about correctness",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "timeout -k 10 120 npm test",
+      "isError": false,
+      "text": "done",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "timeout with an option that takes a value (-k 10) still wraps npm test",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "timeout -s KILL 300 npm test",
+      "isError": true,
+      "text": "Exit code 1\nnpm ERR! Test failed.",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "fail"
+    },
+    "note": "timeout -s KILL wrapping a failing npm test is a failing test run",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "gtimeout 120 cargo test",
+      "isError": false,
+      "text": "done",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "strong",
+      "outcome": "pass"
+    },
+    "note": "gtimeout (coreutils on macOS) wraps cargo test",
+    "source": "constructed"
+  },
+  {
+    "run": {
+      "tool": "Bash",
+      "command": "timeout 120 npm test 2>&1 | tail -20",
+      "isError": false,
+      "text": "done",
+      "backgrounded": false
+    },
+    "expect": {
+      "strength": "none"
+    },
+    "note": "guard: through a pipe with no summary line, the exit code is tail's: no evidence",
     "source": "constructed"
   }
 ]

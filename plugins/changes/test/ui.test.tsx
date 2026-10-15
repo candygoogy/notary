@@ -234,30 +234,124 @@ test('with room for one row only, Changes draws its own row', { options: { track
 
 const STORE = 'C:/Users/me/.claude/plugin-data/notary-changes/s1'
 
-for (const reason of ['clear', 'resume'] as const) {
-  test(`/${reason} removes the snapshots and starts the history fresh; the next turn is tracked again`, { options: { trackShell: false } }, async ($, on) => {
-    const w = await edited($, on, 'terminal')
-    const removals = () => w.runs.filter(argv => argv.join(' ').includes('Get-ChildItem')).length
-    await $.session.end({ reason, sessionId: 's1' } as never)
-    expect(removals()).toBe(1)
-    expect(w.last('index').edits).toEqual([])
-    expect(w.last('session')).toBeNull()
-    expect(w.last('band')).toBeNull()
+const removals = (w: ReturnType<typeof world>) => w.runs.filter(argv => argv.join(' ').includes('Get-ChildItem')).length
 
-    // No session.start follows a /clear: the next hook sets the session up.
-    w.files.set(PATH, 'before\n')
-    await editTurn($, 't2')
-    const index = w.last('index')
-    expect(index.edits.length).toBe(1)
-    expect(index.turns.map((t: any) => [t.turnId, t.ordinal])).toEqual([['t2', 1]])
-    expect(w.last('session').store).toBe(STORE)
-  })
+test('/clear keeps the old conversation on disk; the new one (a new id) starts empty', { options: { trackShell: false } }, async ($, on) => {
+  const w = await edited($, on, 'terminal')
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } } as never)
+  expect(removals(w)).toBe(0)
+  expect(w.files.has(`${STORE}/index.json`)).toBe(true)
+  expect(w.last('index').edits).toEqual([])
+  expect(w.last('session')).toBeNull()
+  expect(w.last('band')).toBeNull()
+
+  // No session.start follows a /clear: the next hook sets the new conversation up.
+  w.identity.id = 's2'
+  w.files.set(PATH, 'before\n')
+  await editTurn($, 't2')
+  const index = w.last('index')
+  expect(index.turns.map((t: any) => [t.turnId, t.ordinal])).toEqual([['t2', 1]])
+  expect(w.last('session').store).toBe(STORE.replace(/s1$/, 's2'))
+})
+
+// A resumed conversation: the same id, a fresh $.state, a later launch.
+async function resume($: Engine, w: ReturnType<typeof world>) {
+  await $.session.end({ reason: 'resume', sessionId: 's1', resume: { id: 's1' } } as never)
+  await w.clock.advance(60_000)
 }
 
-test('a real end removes the snapshots too', { options: { trackShell: false } }, async ($, on) => {
+test('a resumed conversation shows its history again, the earlier turns under a divider', { options: { trackShell: false } }, async ($, on) => {
   const w = await edited($, on, 'terminal')
-  await $.session.end({ reason: 'other', sessionId: 's1' } as never)
-  expect(w.runs.filter(argv => argv.join(' ').includes('Get-ChildItem')).length).toBe(1)
+  await resume($, w)
+  w.files.set(PATH, 'after\n')
+  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true } as never)
+  expect(w.last('index').turns.map((t: any) => [t.turnId, t.ordinal])).toEqual([['t1', 1]])
+  const pane = await mountPane($, 'terminal')
+  expect(await texts(pane)).toContain('── Earlier · ')
+  // Turn numbers go on from the transcript's.
+  const B2 = 'C:/work/src/b.ts'
+  w.files.set(B2, 'before\n')
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await $.tool.call({ tool: 'Edit', file_path: B2, old_string: 'before', new_string: 'after' })
+  await $.turn.complete({ answer: 'Done.', durationMs: 5, isAborted: false, turnId: 't2', reason: 'answer' })
+  expect(w.last('index').turns.map((t: any) => [t.turnId, t.ordinal])).toEqual([
+    ['t1', 1],
+    ['t2', 2],
+  ])
+})
+
+test('resumed, untouched since: the revert lands and Claude is told the right turn', { options: { trackShell: false } }, async ($, on) => {
+  const w = await edited($, on, 'terminal')
+  await resume($, w)
+  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true } as never)
+  const pane = await mountPane($, 'terminal')
+  await pane.press({ key: 'select-t1' })
+  await pane.press({ key: `revert-${FILE}` })
+  await pane.press({ key: `confirm-${FILE}` })
+  expect(w.files.get(PATH)).toBe('before\n')
+  const note = w.session.appended().find(row => row.message.type === 'user')
+  expect(JSON.stringify(note?.message.content)).toContain('reverted C:/work/src/a.ts to its state before turn #1')
+})
+
+test('resumed, the file changed while no session watched: the revert is refused, nothing written', { options: { trackShell: false } }, async ($, on) => {
+  const w = await edited($, on, 'terminal')
+  await resume($, w)
+  w.files.set(PATH, 'edited between sessions\n')
+  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true } as never)
+  const pane = await mountPane($, 'terminal')
+  await pane.press({ key: 'select-t1' })
+  await pane.press({ key: `revert-${FILE}` })
+  expect(await pane.find({ key: `confirm-${FILE}` })).toBeUndefined()
+  expect(await texts(pane)).toContain("src/a.ts changed since Claude's last edit, so it was left alone.")
+  expect(w.files.get(PATH)).toBe('edited between sessions\n')
+})
+
+test('a saved history that does not read is ignored whole, and the pane says so', { options: { trackShell: false } }, async ($, on) => {
+  const w = await edited($, on, 'terminal')
+  await resume($, w)
+  w.files.set(`${STORE}/index.json`, '{"format":1,"sessionId":"s1","index":{"turns":[')
+  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true } as never)
+  expect(w.last('index').turns).toEqual([])
+  const pane = await mountPane($, 'terminal')
+  expect(await texts(pane)).toContain('The history saved for this conversation could not be read, so it starts empty here.')
+})
+
+test('the end only gives the lease up and marks the folder: no removal, no command', { options: { trackShell: false } }, async ($, on) => {
+  const w = await edited($, on, 'terminal')
+  const runs = w.runs.length
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } } as never)
+  expect(w.runs.length).toBe(runs)
+  expect(JSON.parse(w.files.get(`${STORE}/lease.json`)!).at).toBe(0)
+  expect(JSON.parse(w.files.get(`${STORE}/index.json`)!).index.turns.length).toBe(1)
+})
+
+test('keepHistoryDays 0: a real end removes the copies, as before', { options: { trackShell: false, keepHistoryDays: 0 } }, async ($, on) => {
+  const w = await edited($, on, 'terminal')
+  expect(w.files.has(`${STORE}/index.json`)).toBe(false)
+  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } } as never)
+  expect(removals(w)).toBe(1)
+})
+
+test('another window holds the conversation: the history shows, read-only, and is not written', { options: { trackShell: false } }, async ($, on) => {
+  const w = world(on)
+  engineDraws(on)
+  editingTool(on, w)
+  w.files.set(PATH, 'before\n')
+  w.files.set(`${STORE}/lease.json`, JSON.stringify({ token: 'other-window', at: 1_000 }))
+  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true } as never)
+  await editTurn($)
+  expect(w.files.has(`${STORE}/index.json`)).toBe(false)
+  const pane = await mountPane($, 'terminal')
+  expect(await texts(pane)).toContain('This conversation is also open in another Claude Code window.')
+  expect((await $.command.run({ command: 'changes', args: 'forget' } as never) as { text: string }).text).toContain('Forget it there.')
+})
+
+test('/changes forget deletes the kept history and copies, and starts empty', { options: { trackShell: false } }, async ($, on) => {
+  const w = await edited($, on, 'terminal')
+  const result = await $.command.run({ command: 'changes', args: 'forget' } as never)
+  expect((result as { text: string }).text).toBe("Changes deleted this conversation's history and its saved copies.")
+  expect(removals(w)).toBe(1)
+  expect(w.last('index').edits).toEqual([])
 })
 
 test('a kept index whose snapshots folder is gone starts fresh, never pointing at missing copies', { options: { trackShell: false } }, async ($, on) => {
@@ -368,6 +462,166 @@ test('a turn is titled by its prompt on one line, cut at a word', { options: { t
   await editTurn($, 't1', 'Fix "a" in src/a.ts,\nthen run the tests and tell me what failed and why it failed')
   const pane = await mountPane($, 'terminal')
   expect((await pane.find({ key: 'select-t1' }))?.text).toContain('#1 "Fix "a" in src/a.ts, then run the tests and tell me what…" · 1 file')
+})
+
+// ── Revert all ──
+
+const B = 'C:/work/src/b.ts'
+const FILE_B = 't1-c:/work/src/b.ts'
+
+// One turn that edits src/a.ts and src/b.ts from "before" to "after".
+async function twoFileTurn($: Engine, on: On, surface: Surface) {
+  const w = world(on)
+  engineDraws(on)
+  editingTool(on, w)
+  w.files.set(PATH, 'before\n')
+  w.files.set(B, 'before\n')
+  await $.session.start({ cwd: 'C:/work', surface, isInteractive: true } as never)
+  await $.turn.start({ text: 'fix both', turnId: 't1' })
+  await $.tool.call({ tool: 'Edit', file_path: PATH, old_string: 'before', new_string: 'after' })
+  await $.tool.call({ tool: 'Edit', file_path: B, old_string: 'before', new_string: 'after' })
+  await $.turn.complete({ answer: 'Done.', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' })
+  return w
+}
+
+for (const surface of SURFACES) {
+  test(`${surface}: Revert all is two presses; the first writes nothing`, { options: { trackShell: false } }, async ($, on) => {
+    const w = await twoFileTurn($, on, surface)
+    const pane = await mountPane($, surface)
+    expect((await pane.find({ key: 'revertall-t1' }))?.text).toContain('Revert all (#1)')
+    await pane.press({ key: 'revertall-t1' })
+    expect(w.files.get(PATH)).toBe('after\n')
+    expect(w.files.get(B)).toBe('after\n')
+    expect((await pane.find({ key: 'confirmall-t1' }))?.text).toContain('Confirm revert all (#1): write 2, skip 0')
+    await pane.press({ key: 'confirmall-t1' })
+    expect(w.files.get(PATH)).toBe('before\n')
+    expect(w.files.get(B)).toBe('before\n')
+    expect(await texts(pane)).toContain('Reverted 2 files of #1.')
+    // One note to Claude for both files.
+    const notes = w.session.appended().filter(row => row.message.type === 'user')
+    expect(notes).toHaveLength(1)
+    expect(JSON.stringify(notes[0].message.content)).toContain('C:/work/src/a.ts, C:/work/src/b.ts')
+    // Nothing pending is left, so Revert all goes.
+    expect(await pane.find({ key: 'revertall-t1' })).toBeUndefined()
+  })
+}
+
+test('Revert all skips a file changed outside Claude and offers it its own way on', { options: { trackShell: false } }, async ($, on) => {
+  const w = await twoFileTurn($, on, 'terminal')
+  const pane = await mountPane($, 'terminal')
+  w.files.set(B, 'edited by hand\n')
+  await pane.press({ key: 'revertall-t1' })
+  expect((await pane.find({ key: 'confirmall-t1' }))?.text).toContain('write 1, skip 1')
+  expect(await texts(pane)).toContain("Revert all skips 1 of #1's files: src/b.ts changed since Claude's last edit")
+  await pane.press({ key: 'confirmall-t1' })
+  expect(w.files.get(PATH)).toBe('before\n')
+  expect(w.files.get(B)).toBe('edited by hand\n')
+  expect(await texts(pane)).toContain('Reverted 1 file of #1. Skipped 1 file: src/b.ts changed since')
+  // A changed-externally refusal has no way on: no bulk "anyway", no offer.
+  expect(await pane.find({ key: `offer-${FILE_B}` })).toBeUndefined()
+})
+
+test('Revert all on a turn with nothing it can revert explains, with no confirm', { options: { trackShell: false } }, async ($, on) => {
+  const w = await twoFileTurn($, on, 'terminal')
+  const pane = await mountPane($, 'terminal')
+  w.files.set(PATH, 'mine\n')
+  w.files.set(B, 'mine too\n')
+  await pane.press({ key: 'revertall-t1' })
+  expect(await pane.find({ key: 'confirmall-t1' })).toBeUndefined()
+  expect(await texts(pane)).toContain('Nothing in #1 can be reverted.')
+  expect(w.files.get(PATH)).toBe('mine\n')
+})
+
+test('Revert all leaves a kept file alone and says so', { options: { trackShell: false } }, async ($, on) => {
+  const w = await twoFileTurn($, on, 'terminal')
+  const pane = await mountPane($, 'terminal')
+  await pane.press({ key: `keep-${FILE_B}` })
+  await pane.press({ key: 'revertall-t1' })
+  expect((await pane.find({ key: 'confirmall-t1' }))?.text).toContain('write 1, skip 1')
+  await pane.press({ key: 'confirmall-t1' })
+  expect(w.files.get(PATH)).toBe('before\n')
+  expect(w.files.get(B)).toBe('after\n')
+  expect(await texts(pane)).toContain('src/b.ts is kept.')
+})
+
+test('a later turn on the same file: Revert all skips it and offers Revert with #2 on its row', { options: { trackShell: false } }, async ($, on) => {
+  const w = await twoFileTurn($, on, 'terminal')
+  await $.turn.start({ text: 'again', turnId: 't2' })
+  await $.tool.call({ tool: 'Edit', file_path: B, old_string: 'after', new_string: 'later' })
+  await $.turn.complete({ answer: 'Done.', durationMs: 5, isAborted: false, turnId: 't2', reason: 'answer' })
+  const pane = await mountPane($, 'terminal')
+  await pane.press({ key: 'select-t1' })
+  await pane.press({ key: 'revertall-t1' })
+  await pane.press({ key: 'confirmall-t1' })
+  expect(w.files.get(PATH)).toBe('before\n')
+  expect(w.files.get(B)).toBe('later\n')
+  expect((await pane.find({ key: `offer-${FILE_B}` }))?.text).toContain('Revert with #2')
+  // The offer is that file's own two-press revert: its confirm, nothing written yet.
+  await pane.press({ key: `offer-${FILE_B}` })
+  expect(w.files.get(B)).toBe('later\n')
+  expect((await pane.find({ key: `confirm-${FILE_B}` }))?.text).toContain('Confirm revert (#1, #2)')
+})
+
+// Open opens the pane before it selects the band's turn: the pane's drawing
+// read the view, so the selection's write draws it again, on that turn.
+test("the band's Open shows the band's turn selected, not the pane's last view", { options: { trackShell: false } }, async ($, on) => {
+  const w = await edited($, on, 'terminal')
+  const pane = await mountPane($, 'terminal')
+  await pane.press({ key: 'select-t1' })
+  w.files.set(PATH, 'before\n')
+  await editTurn($, 't2')
+  const band = await mountBand($, 'terminal')
+  await band.press({ key: 'open' })
+  expect((await pane.find({ key: 'select-t2' }))?.text).toContain('▾ #2')
+  expect((await pane.find({ key: 'select-t1' }))?.text).toContain('▸ #1')
+})
+
+const WAITS = 'the window is 80 columns wide; widen it to 110'
+
+for (const surface of SURFACES) {
+  test(`${surface}: Open on a pane that waits undrawn says why, once`, { options: { trackShell: false } }, async ($, on) => {
+    const w = await edited($, on, surface)
+    w.placement.reason = WAITS
+    const band = await mountBand($, surface)
+    await band.press({ key: 'open' })
+    expect(w.toasts).toEqual([`Changes pane is ready but not shown yet: ${WAITS}.`])
+    // Still waiting, so the band keeps Open; the next press says it again, once.
+    await band.press({ key: 'open' })
+    expect(w.toasts).toHaveLength(2)
+  })
+
+  test(`${surface}: Open on a pane that is drawn says nothing`, { options: { trackShell: false } }, async ($, on) => {
+    const w = await edited($, on, surface)
+    const band = await mountBand($, surface)
+    await band.press({ key: 'open' })
+    expect(w.opened).toEqual(['changes'])
+    expect(w.toasts).toEqual([])
+  })
+
+  test(`${surface}: /changes answers why the pane waits, or that it opened`, { options: { trackShell: false } }, async ($, on) => {
+    const w = world(on)
+    await $.session.start({ cwd: 'C:/work', surface, isInteractive: true } as never)
+    w.placement.reason = WAITS
+    const waiting = await $.command.run({ command: 'changes', args: '' } as never)
+    expect((waiting as { text: string }).text).toBe(`Changes pane is ready but not shown yet: ${WAITS}.`)
+    w.placement.reason = null
+    const drawn = await $.command.run({ command: 'changes', args: '' } as never)
+    expect((drawn as { text: string }).text).toBe('Changes pane opened.')
+    expect(w.toasts).toEqual([])
+  })
+}
+
+test('autoOpen on a pane that waits undrawn says nothing: the person did not ask', { options: { trackShell: false, autoOpen: true } }, async ($, on) => {
+  const w = world(on)
+  w.placement.reason = WAITS
+  engineDraws(on)
+  editingTool(on, w)
+  w.files.set(PATH, 'before\n')
+  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true } as never)
+  await $.ui.mount({ plugin: 'changes', surface: 'terminal', component: 'PromptHint', props: {} as never, viewport: { columns: 160, rows: 40, isFullscreen: true } })
+  await editTurn($)
+  expect(w.opened).toEqual(['changes'])
+  expect(w.toasts).toEqual([])
 })
 
 test('/changes opens the pane', { options: { trackShell: false } }, async ($, on) => {

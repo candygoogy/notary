@@ -23,7 +23,9 @@ export function world(on: On, { trackShell = false, expectLogs = false } = {}) {
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }) as never)
   on('command.register', () => ({ value: undefined }) as never)
-  on('session.id', () => ({ value: 's1' }) as never)
+  // The transcript id: a /clear moves on to another (set `identity.id`), a resume keeps it.
+  const identity = { id: 's1' }
+  on('session.id', () => ({ value: identity.id }) as never)
   on('session.root', () => ({ value: 'C:/work' }) as never)
   on('session.version', () => ({ value: { version: '2.1.296', base: '2.1.296', builtAt: '' } }) as never)
   on('env.get', (_$, e) => ({ value: ({ USERPROFILE: 'C:/Users/me', OS: 'Windows_NT' } as Record<string, string>)[e.name] }) as never)
@@ -46,10 +48,19 @@ export function world(on: On, { trackShell = false, expectLogs = false } = {}) {
   const opened: string[] = []
   // The engine's record of the open panes, as `$.ui.panes()` lists them.
   const panes = new Map<string, { id: string; title: string; isShown: boolean; isFocused: boolean; isPlaced: boolean }>()
+  // What the engine answers an open: drawn, or waiting with its reason (set
+  // `placement.reason` to make the next opens wait).
+  const placement: { reason: string | null } = { reason: null }
+  const toasts: string[] = []
   on('ui.open', (_$, e) => {
     opened.push(e.id)
-    panes.set(e.id, { id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: true })
-    return { value: { isPlaced: true } } as never
+    const isPlaced = placement.reason === null
+    panes.set(e.id, { id: e.id, title: e.title ?? e.id, isShown: isPlaced, isFocused: false, isPlaced })
+    return { value: isPlaced ? { isPlaced: true } : { isPlaced: false, reason: placement.reason } } as never
+  })
+  on('ui.toast', (_$, e) => {
+    toasts.push(e.text)
+    return { value: undefined } as never
   })
   on('ui.close', (_$, e) => {
     panes.delete(e.id)
@@ -74,6 +85,12 @@ export function world(on: On, { trackShell = false, expectLogs = false } = {}) {
       files.delete(norm(env.NOTARY_TARGET))
       return answer(0)
     }
+    // A session folder's removal (store.ts removeTree): everything under it.
+    if (script.includes('Get-ChildItem') && script.includes('Remove-Item')) {
+      const dir = norm(env.NOTARY_TARGET)
+      for (const path of [...files.keys()]) if (path.startsWith(dir + '/')) files.delete(path)
+      return answer(0)
+    }
     return answer(1)
   })
   // Keys whose writes the host refuses, as it does a value over 4 MiB.
@@ -92,7 +109,7 @@ export function world(on: On, { trackShell = false, expectLogs = false } = {}) {
   const session = mock.session(on)
 
   const last = (key: string) => [...writes].reverse().find(w => w.key === key)?.value as any
-  return { files, writes, runs, last, trackShell, session, clock, refuse, logs, opened, panes }
+  return { files, writes, runs, last, trackShell, session, clock, refuse, logs, opened, panes, placement, toasts, identity }
 }
 
 export const PATH = 'C:/work/src/a.ts'
@@ -100,7 +117,10 @@ export const PATH = 'C:/work/src/a.ts'
 // The Edit tool beneath: it writes the new text, as the real one does.
 export function editingTool(on: On, w: ReturnType<typeof world>) {
   on('tool.call', (_$, e) => {
-    if (e.tool === 'Edit') w.files.set(PATH, 'after\n')
+    if (e.tool === 'Edit') {
+      const edit = e as unknown as { file_path?: string; new_string?: string }
+      w.files.set(edit.file_path ?? PATH, `${edit.new_string ?? 'after'}\n`)
+    }
     return { result: {}, text: '' } as never
   })
 }

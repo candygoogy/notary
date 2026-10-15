@@ -386,3 +386,36 @@ test('an edit through the long spelling of a short-name cwd is inside the projec
   await $.tool.call(npmTest)
   expect(await answer($, 'All tests pass.')).toBe(sendBackText(contradicted))
 })
+
+// The `checks` setting: a command the person declared counts like a runner.
+const verify = { tool: 'Bash', command: 'pnpm verify' } as const
+
+test('a declared tests check that fails contradicts the claim and sends it back', { options: { checks: ['tests: pnpm verify'] } }, async ($, on) => {
+  const w = world(on)
+  await $.turn.start({ text: 'fix it', turnId: 't1' })
+  w.answers.push(landed, { result: {}, text: 'Exit code 1\nverify: 2 problems', isError: true })
+  await $.tool.call(edit)
+  await $.tool.call(verify)
+  const block = await answer($, 'All tests pass.')
+  expect(block).toContain('pnpm verify')
+})
+
+test('a declared tests check that passes verifies the claim', { options: { checks: ['tests: pnpm verify'] } }, async ($, on) => {
+  const w = world(on)
+  await $.turn.start({ text: 'fix it', turnId: 't1' })
+  w.answers.push(landed, { result: {}, text: 'verify ok' })
+  await $.tool.call(edit)
+  await $.tool.call(verify)
+  await answer($, 'All tests pass.')
+  expect(w.stamps()).toEqual(['🧾 ✅ Verified · pnpm verify passed'])
+})
+
+test('without the setting, the same run backs nothing', async ($, on) => {
+  const w = world(on)
+  await $.turn.start({ text: 'fix it', turnId: 't1' })
+  w.answers.push(landed, { result: {}, text: 'verify ok' })
+  await $.tool.call(edit)
+  await $.tool.call(verify)
+  await answer($, 'All tests pass.')
+  expect(w.stamps()).toEqual([stampText(unverified)])
+})

@@ -27,7 +27,9 @@ export type RestoreContext = {
 export type RevertOutcome =
   | { ok: true; refs: RevertRef[]; before: Content; after: Content; widenedTo?: string[] }
   | Exclude<RevertPlan, { ok: true }>
-  | { ok: false; reason: 'io' }
+  // `afterWrite`: the restore ran and did not land (or could not be
+  // verified); without it, nothing was written.
+  | { ok: false; reason: 'io'; afterWrite?: true }
 
 export const TMP_SUFFIX = '.notary-tmp'
 const COMMAND_TIMEOUT_MS = 20_000
@@ -95,21 +97,100 @@ export async function revertFile(
 ): Promise<RevertOutcome> {
   // Stored: the content a revert replaces stays restorable.
   const current = await capture(io, ctx.store, path)
-  const plan = planRevert(index, ref, mode, current, options)
+  const plan = await planFile(io, ctx, index, ref, mode, current, options)
   if (!plan.ok) return plan
   // The path must still land on the file the plan is for (a link retargeted
   // since would send the write elsewhere).
   if ((await keyOf(io, path, ctx.platform)) !== ref.key) return { ok: false, reason: 'changed-externally' }
-  if (!(await runRestore(io, ctx, path, rel, plan.restore))) return { ok: false, reason: 'io' }
-  if (!(await holds(io, ctx, path, rel, plan.target))) return { ok: false, reason: 'io' }
+  if (!(await runRestore(io, ctx, path, rel, plan.restore))) return { ok: false, reason: 'io', afterWrite: true }
+  if (!(await holds(io, ctx, path, rel, plan.target))) return { ok: false, reason: 'io', afterWrite: true }
   return { ok: true, refs: plan.refs, before: current, after: plan.target, ...(plan.widenedTo ? { widenedTo: plan.widenedTo } : {}) }
+}
+
+// planRevert, and the saved copy it would write back is still on disk: a
+// copy gone from the folder (deleted by hand, a sweep cut short, a history
+// kept from an earlier launch) is refused as no-snapshot while planning,
+// before anything is written.
+export async function planFile(
+  io: Ports,
+  ctx: RestoreContext,
+  index: Index,
+  ref: RevertRef,
+  mode: 'turn' | 'turnAndLater',
+  current: Content,
+  options: RevertOptions = {},
+): Promise<RevertPlan> {
+  const plan = planRevert(index, ref, mode, current, options)
+  if (!plan.ok || (plan.restore.kind !== 'write-text' && plan.restore.kind !== 'write-bytes')) return plan
+  const copy = `${ctx.store}/blobs/${plan.restore.hash}.${plan.restore.kind === 'write-text' ? 'txt' : 'b64'}`
+  try {
+    return (await io.fs.exists(copy)) ? plan : { ok: false, reason: 'no-snapshot' }
+  } catch {
+    return { ok: false, reason: 'no-snapshot' }
+  }
+}
+
+// One file of a turn, as a whole-turn revert names it.
+export type TurnFile = { turnId: string; key: string; path: string; rel?: string }
+export type Reverted = Extract<RevertOutcome, { ok: true }>
+export type Refused = Exclude<RevertOutcome, { ok: true }>
+
+// What reverting each file of the turn would do now, written nothing: the
+// first press of Revert all.
+export async function planTurn(io: Ports, ctx: RestoreContext, index: Index, files: readonly TurnFile[]): Promise<Array<{ file: TurnFile; plan: RevertPlan }>> {
+  const plans: Array<{ file: TurnFile; plan: RevertPlan }> = []
+  for (const file of files) {
+    const current = await capture(io, ctx.store, file.path, { store: false })
+    plans.push({ file, plan: await planFile(io, ctx, index, { turnId: file.turnId, key: file.key }, 'turn', current) })
+  }
+  return plans
+}
+
+export type TurnRevert = {
+  reverted: Array<{ file: TurnFile; outcome: Reverted }>
+  skipped: Array<{ file: TurnFile; outcome: Refused }>
+  // A write that did not land: the run stopped there, and `notTried` were left alone.
+  stopped: TurnFile | null
+  notTried: TurnFile[]
+}
+
+// Reverts a turn file by file, each planned afresh from the disk and checked
+// as a single revert is. A refusal skips that file and nothing is written to
+// it. A write that did not land stops the run: the disk is not as expected
+// (full, locked, permissions), so no more files are written into it.
+// `record` saves each landed revert before the next file is tried and answers
+// the index the next one is planned from, so the history stays one chain.
+export async function revertTurn(
+  io: Ports,
+  ctx: RestoreContext,
+  index: Index,
+  files: readonly TurnFile[],
+  record: (file: TurnFile, outcome: Reverted) => Promise<Index>,
+): Promise<TurnRevert> {
+  const result: TurnRevert = { reverted: [], skipped: [], stopped: null, notTried: [] }
+  let current = index
+  for (const [i, file] of files.entries()) {
+    const outcome = await revertFile(io, ctx, current, { turnId: file.turnId, key: file.key }, 'turn', file.path, file.rel)
+    if (outcome.ok) {
+      result.reverted.push({ file, outcome })
+      current = await record(file, outcome)
+    } else if (outcome.reason === 'io' && 'afterWrite' in outcome) {
+      result.stopped = file
+      result.notTried = files.slice(i + 1)
+      break
+    } else {
+      result.skipped.push({ file, outcome })
+    }
+  }
+  return result
 }
 
 function powershell(script: string): string[] {
   return ['powershell', '-NoProfile', '-NonInteractive', '-Command', script]
 }
 
-async function moveInto(io: Ports, platform: Platform, tmp: string, target: string): Promise<boolean> {
+// Moves `tmp` over `target` in one rename, so a reader never sees half a file.
+export async function moveInto(io: Ports, platform: Platform, tmp: string, target: string): Promise<boolean> {
   const argv = platform === 'windows' ? powershell(WINDOWS_MOVE) : ['mv', '-f', '--', tmp, target]
   return succeeds(io, argv, { NOTARY_TMP: tmp, NOTARY_TARGET: target })
 }

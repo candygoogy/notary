@@ -12,7 +12,7 @@ Needs Claude Code 2.1.287 or later; on an older version, Changes shows one notic
 
 ## The Changes pane
 
-`/changes` opens or closes the pane. In the fullscreen layout it docks beside the transcript; otherwise it opens inline.
+`/changes` opens the pane. In the fullscreen layout it docks beside the transcript; otherwise it opens inline. If the window is too narrow for it, the pane waits, and `/changes` or the band's **Open** says so and why, once.
 
 - **Timeline**, newest turn first. Each row is a turn: its number, its prompt and how many files it changed. Selecting a turn expands its steps:
   - the tool calls that changed files;
@@ -55,6 +55,19 @@ After a revert, Claude gets a short hidden note, for example *"The user reverted
 
 A revert is recorded too, as a row in the timeline. A later revert of the same file builds on it, so the history stays honest.
 
+### Revert a whole turn
+
+Under the selected turn, **Revert all (#12)** reverts every file that turn changed and you haven't reverted or kept. It takes two presses too:
+
+1. The first press checks every file as it is now and writes nothing. If a file can't be reverted, the pane says which one and why, with the same words as the table above.
+2. The button becomes **Confirm revert all (#12): write 3, skip 1** for 5 seconds. Press it to revert the files that can be.
+
+A file that can't be reverted is skipped and never forced: Revert all has no "anyway". Where the table above offers a way on (**Revert with #14**, **Revert anyway**), that button appears on the file's own row afterwards, for that file alone. Kept files are left alone and listed as kept.
+
+Each file is written and checked as a single revert is, and recorded before the next one. If a write can't be confirmed (a full or locked disk, say), Revert all stops there and leaves the remaining files untouched, saying which file to check. The files already reverted stay reverted and recorded.
+
+Claude gets one hidden note listing every file reverted, not one per file.
+
 ## Settings
 
 | Setting | Default | What it does |
@@ -64,15 +77,26 @@ A revert is recorded too, as a row in the timeline. A later revert of the same f
 | `autoOpen` | off | Open the pane by itself, once, when the first turn with code changes ends: only in the fullscreen layout, where it docks beside the transcript, and on a terminal at least 144 columns wide. |
 | `tellClaude` | on | The hidden note to Claude after a revert. |
 | `trackShell` | on | In a git repository, find the files Bash and PowerShell commands changed. |
+| `keepHistoryDays` | 7 | How many days a conversation's copies and history are kept after you last used it, so a resumed conversation can still revert. `0` deletes them at the end of each session. |
 
 Change them in the `/config` menu.
+
+## Resumed conversations
+
+Resume a conversation (`claude --resume`, `claude --continue` or `/resume`) and the pane shows its earlier turns again, under a line *Earlier · Oct 12, 14:05*. Turn numbers carry on from where the conversation was, and Keep and Revert work as before.
+
+A file that changed while no session was watching (you edited it, another conversation's Claude did, you switched branches) is not reverted: Changes only writes when the file is exactly what Claude left, the same check as always. A copy that is no longer on disk is refused before anything is written.
+
+`/clear` starts a new conversation, so the pane starts empty. The old conversation's history is kept and comes back if you resume it.
+
+If the same conversation is open in two Claude Code windows, the second shows the history but doesn't save to it, and says so. A window that crashed gives up its claim after 10 minutes.
 
 ## How it works
 
 - **Claude's own edits** (`Edit`, `Write`, `NotebookEdit`, in the main conversation or any subagent): Changes reads the file right before and right after each one, and saves a copy.
 - **Subagents** belong to the turn that started them, even when they keep working after that turn ends.
 - **Shell commands** (inside a git repository only): Changes compares `git status`, and the files it lists, before and after each command.
-- **Copies** of files are stored once per content, under `~/.claude/plugin-data/notary-changes/<session>/`. They're deleted when the session ends. Folders left behind by a crash are swept after 7 days.
+- **Copies** of files are stored once per content, under `~/.claude/plugin-data/notary-changes/<conversation>/`, with the conversation's history in `index.json` beside them. They're kept for `keepHistoryDays` after the conversation was last used (see Privacy).
 
 ## How it differs from `/diff`
 
@@ -103,4 +127,12 @@ Claude Code's built-in `/diff` shows the working tree's git diff. Changes is per
 
 ## Privacy
 
-Changes runs entirely on your machine. It makes no network requests, collects no telemetry, and makes no model calls. Its saved copies of your files stay in your `~/.claude` folder and are deleted at the end of the session.
+Changes runs entirely on your machine. It makes no network requests, collects no telemetry, and makes no model calls. Nothing it keeps leaves your machine.
+
+**What it keeps, and where.** A copy of each file Claude changed, from before and after each change, and the conversation's history of those changes, in `~/.claude/plugin-data/notary-changes/<conversation>/` (under `CLAUDE_CONFIG_DIR` if you set it). The copies are of whatever Claude changed, so they can include secrets, such as a `.env` file Claude edited.
+
+**For how long.** 7 days after you last used the conversation, so that a resumed conversation (`claude --resume`, `--continue`, `/resume`) can still show and revert its changes. Older ones are deleted the next time Changes starts, and all kept conversations together are held under 1 GB, oldest deleted first.
+
+**How to keep less.**
+- `/changes forget` deletes the current conversation's copies and history now.
+- Set `keepHistoryDays` to `0` in `/config` to delete them at the end of every session, as Changes did before 0.2. Copies left by a crash are then deleted after 7 days.

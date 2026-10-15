@@ -123,7 +123,22 @@ Every Bash and PowerShell command Claude runs is classified by what it can prove
 - anything ending in `|| true`, `|| exit 0` or `|| :`
 - runs that timed out, were interrupted, or that you rejected
 
-Runners are recognized however they're called: `npx vitest`, `node node_modules/vitest/vitest.mjs`, `.\venv\Scripts\python.exe -m pytest`, `~/.cargo/bin/cargo test`, `timeout 120 pnpm exec vitest`.
+Runners are recognized however they're called: `npx vitest`, `node node_modules/vitest/vitest.mjs`, `.\venv\Scripts\python.exe -m pytest`, `~/.cargo/bin/cargo test`, `timeout 120 pnpm exec vitest`, `timeout -k 10 300 npm test`, `gtimeout 120 cargo test`.
+
+### Your own checks
+
+If your project runs its tests or build through its own command (`pnpm verify`, `make ci`, `./check.sh`), tell Receipts with the `checks` setting. Each entry is `tests: <command>` or `build: <command>`:
+
+```
+/receipts check add "pnpm verify" tests
+/receipts check add "make ci" build
+/receipts checks
+/receipts check remove "make ci"
+```
+
+You can also edit the list in `/config`. A declared check follows the same rules as the runners above: it matches its command with any arguments after it, through the same wrappers, and in chains and pipes. Its exit code or summary decides pass or fail. A failing `tests:` check counts like a failing test run, so it can contradict a claim and send Claude back. A declared check never weakens a runner Receipts already knows.
+
+When a claim names the command itself ("`pnpm verify` passes"), it is judged as a tests or build claim by the same list.
 
 In a chain like `npm run build && npm test`, the strongest check that actually ran decides, and of several, the last. If an early step fails, the steps after it never ran. When one command runs the same test runner twice, its last summary decides. That covers the common "run one test, fix, run the suite" pattern.
 
@@ -146,8 +161,9 @@ Pester only sets an exit code with `-CI`, so its summary is always read.
 | `smartCheck` | on or off | off | `/receipts smart on\|off` |
 | `verbosity` | quiet (flag ❌ and unchecked tests or build claims; the rest goes to the pane) or all | quiet | `/receipts verbosity quiet\|all` |
 | `stamp` | on or off | on | `/config` |
+| `checks` | your own check commands, each `tests: <command>` or `build: <command>` | none | `/receipts check add <command> tests\|build`, `/receipts check remove <command>`, `/receipts checks` |
 
-`/receipts` with no arguments opens the pane.
+`/receipts` with no arguments opens the pane. If the window is too narrow for it, the pane waits, and `/receipts` or the band's **Details** says so and why, once.
 
 ## Sending back and nudging
 

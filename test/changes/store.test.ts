@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { fakeHost } from './fake-host.ts'
 import { capture } from '../../plugins/changes/hooks/io/blobs.ts'
-import { isSessionFolder, removeTree, STALE_MS, staleSessions, storeUsage, touch } from '../../plugins/changes/hooks/io/store.ts'
+import { isSessionFolder, overTotalCap, removeTree, STALE_MS, staleSessions, storeUsage, touch } from '../../plugins/changes/hooks/io/store.ts'
 
 const BASE = 'C:/cfg/plugin-data/notary-changes'
 const DAY = 24 * 60 * 60 * 1000
@@ -92,4 +92,31 @@ test('review 2 #6: storeUsage sums the blobs, and a full budget stops new snapsh
   assert.equal(budget.full, true)
   // A check (no snapshot) is never refused.
   assert.equal('hash' in (await capture(host as any, `${BASE}/s1`, 'C:/p/big.ts', { store: false, budget })), true)
+})
+
+test('staleSessions takes the kept-history window (keepHistoryDays) in place of a week', async () => {
+  const host = fakeHost()
+  const now = 100 * DAY
+  host.put(`${BASE}/three-days/.touch`, 'x', now - 3 * DAY)
+  host.put(`${BASE}/ten-days/.touch`, 'x', now - 10 * DAY)
+  ;(host.fs as any).list = async () => ['three-days', 'ten-days'].map(name => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false }))
+  assert.deepEqual(await staleSessions(host as any, BASE, `${BASE}/mine`, now, 2 * DAY), [`${BASE}/three-days`, `${BASE}/ten-days`])
+  assert.deepEqual(await staleSessions(host as any, BASE, `${BASE}/mine`, now, 7 * DAY), [`${BASE}/ten-days`])
+})
+
+test('overTotalCap drops the oldest-used histories until all fit, never this session\'s own', async () => {
+  const host = fakeHost()
+  const sizes: Record<string, number> = { oldest: 400, middle: 300, newest: 200, mine: 500 }
+  const used: Record<string, number> = { oldest: 1, middle: 2, newest: 3, mine: 0 }
+  for (const name of Object.keys(sizes)) host.put(`${BASE}/${name}/.touch`, 'x', used[name])
+  ;(host.fs as any).list = async (path: string) => {
+    if (path === BASE) return Object.keys(sizes).map(name => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false }))
+    const name = path.slice(BASE.length + 1).replace(/\/blobs$/, '')
+    return [{ name: 'a.txt', kind: 'file', size: sizes[name], mtimeMs: 0, isLink: false }]
+  }
+  // 1400 in all: under a cap of 1000 the oldest-used (400) goes; under 600 all three
+  // others go (this session's own 500 alone is left).
+  assert.deepEqual(await overTotalCap(host as any, BASE, `${BASE}/mine`, 1000), [`${BASE}/oldest`])
+  assert.deepEqual(await overTotalCap(host as any, BASE, `${BASE}/mine`, 600), [`${BASE}/oldest`, `${BASE}/middle`, `${BASE}/newest`])
+  assert.deepEqual(await overTotalCap(host as any, BASE, `${BASE}/mine`, 2000), [])
 })

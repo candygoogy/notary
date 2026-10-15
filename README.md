@@ -161,7 +161,9 @@ Change them in the `/config` menu, or with the command:
 
 ## Privacy
 
-Both mods run entirely on your machine. They make no network requests, collect no telemetry, and make no model calls. Changes keeps its copies of your files in your `~/.claude` folder and deletes them when the session ends.
+Both mods run entirely on your machine. They make no network requests, collect no telemetry, and make no model calls. Nothing they keep leaves your machine.
+
+Changes keeps a copy of each file Claude changed, and the conversation's history of those changes, in `~/.claude/plugin-data/notary-changes/`. It keeps them for 7 days after you last used the conversation, so a resumed conversation can still revert, and holds all of them under 1 GB. The copies can include secrets, such as a `.env` file Claude edited. `/changes forget` deletes the current conversation's copies now, and setting `keepHistoryDays` to `0` deletes them at the end of every session.
 
 The one exception is Receipts' **smart check**, which is off unless you turn it on. Then, for a sentence the phrase rules can't settle, Receipts asks a small model whether it claims success. Only that sentence is sent, through your own Claude Code session, and it counts toward your usage.
 
@@ -169,8 +171,8 @@ The one exception is Receipts' **smart check**, which is off unless you turn it 
 
 | Mod | What it does | Status |
 |---|---|---|
-| **Changes** | A per-turn timeline of what Claude changed, with a diff and Keep/Revert per file | v0.1 |
-| **Receipts** | Flags success claims no check backs up | v0.1 |
+| **Changes** | A per-turn timeline of what Claude changed, with a diff and Keep/Revert per file | v0.2 |
+| **Receipts** | Flags success claims no check backs up | v0.2 |
 | **Scope Cop** | Blocks edits outside the scope you declared | planned |
 
 ## Contributing

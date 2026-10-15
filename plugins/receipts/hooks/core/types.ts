@@ -3,6 +3,10 @@
 export type ClaimKind = 'tests' | 'build' | 'generic'
 export type Claim = { sentence: string; kind: ClaimKind; certainty: 'sure' | 'maybe' }
 
+// A command the person declared as a check (the `checks` setting): a test run
+// or a build run, matched by its command and any arguments after it.
+export type DeclaredCheck = { kind: 'tests' | 'build'; prefix: string }
+
 export type Strength = 'strong' | 'medium' | 'none'
 export type Outcome = 'pass' | 'fail' | 'pending' | 'zero-tests'
 export type RunInput = { tool: 'Bash' | 'PowerShell'; command: string; isError: boolean; text: string; backgrounded: boolean }

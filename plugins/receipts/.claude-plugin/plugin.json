@@ -1,6 +1,6 @@
 {
   "name": "receipts",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Claude says the tests pass. Receipts checks. Flags success claims that no check backs up.",
   "author": { "name": "Notary contributors" },
   "license": "MIT",
@@ -13,6 +13,7 @@
     "smartCheck": { "type": "boolean", "title": "Smart check", "description": "Ask a model about sentences the phrase rules can't settle. Uses your usage. Off by default.", "default": false },
     "stamp": { "type": "boolean", "title": "Stamp line", "description": "Add a receipt line under each judged answer.", "default": true },
     "enabled": { "type": "boolean", "title": "Enabled", "description": "Turn Receipts on or off.", "default": true },
+    "checks": { "type": "string", "multiple": true, "title": "Checks", "description": "Commands that count as checks, besides the test and build runners Receipts knows. Each one is \"tests: <command>\" or \"build: <command>\", for example \"tests: pnpm verify\". The command matches with any arguments after it.", "default": [] },
     "verbosity": { "type": "string", "title": "Verbosity", "description": "quiet: flag contradictions, and tests or build claims left unchecked after this turn's edits; the rest goes to the /receipts pane. all: show and stamp every verdict.", "options": ["quiet", "all"], "default": "quiet" }
   }
 }

@@ -1,17 +1,19 @@
 import type { EngineInterface as Engine, Hook, Register } from 'claude-code'
 import { update } from 'claude-code'
 
+import { parseChecks } from './core/checks.ts'
 import { findClaims } from './core/claims.ts'
 import { stampText } from './core/copy.ts'
 import { isVerifiableEdit } from './core/edits.ts'
 import { classify } from './core/evidence.ts'
 import { editedSince, emptyLedger, recordEdit, recordRun } from './core/ledger.ts'
-import type { Claim, Mode, Verdict } from './core/types.ts'
+import type { Claim, DeclaredCheck, Mode, Verdict } from './core/types.ts'
 import { decide, judge } from './core/verdict.ts'
 import { bandStays, visibility } from './core/visibility.ts'
 import type { Verbosity, Visibility } from './core/visibility.ts'
 import { SMART_MAX_TOKENS, SMART_MODEL, SMART_SYSTEM, isYes } from './smartcheck.ts'
-import { ARGUMENT_HINT, DESCRIPTION, USAGE, parseCommand } from './commands.ts'
+import { ARGUMENT_HINT, DESCRIPTION, USAGE, editChecks, parseCommand } from './commands.ts'
+import { waitingNote } from './shared/pane.ts'
 import { bandView } from './ui/band.tsx'
 import { paneView } from './ui/pane.tsx'
 
@@ -39,7 +41,7 @@ const STAMPED = { plugin: 'receipts', key: 'stamped' } as const
 
 const PANE = { id: 'receipts', title: 'Receipts' } as const
 
-type Options = { mode: Mode; stamp: boolean; enabled: boolean; smartCheck: boolean; verbosity: Verbosity }
+type Options = { mode: Mode; stamp: boolean; enabled: boolean; smartCheck: boolean; verbosity: Verbosity; checks: DeclaredCheck[] }
 
 export const register: Register = (on, options) => {
   const opts: Options = {
@@ -48,7 +50,11 @@ export const register: Register = (on, options) => {
     enabled: options.enabled !== false,
     smartCheck: options.smartCheck === true,
     verbosity: options.verbosity === 'all' ? 'all' : 'quiet',
+    checks: [],
   }
+  // The person's declared checks; an entry in neither form is named once, at start.
+  const declared = parseChecks(options.checks)
+  opts.checks = declared.checks
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -58,6 +64,9 @@ export const register: Register = (on, options) => {
       debug($, 'session.start', error)
     }
     if (!opts.enabled) return r
+    if (declared.invalid.length > 0) {
+      $.ui.toast(`Receipts ignored ${declared.invalid.length === 1 ? 'a check' : 'checks'} not written as "tests: <command>" or "build: <command>": ${declared.invalid.join('; ')}`)
+    }
     try {
       const { base, version } = await $.session.version()
       if (isOlder(base ?? version, MIN_VERSION)) {
@@ -86,7 +95,7 @@ export const register: Register = (on, options) => {
     const r = await next(e)
     if (!(await isActive($, opts))) return r
     try {
-      await record($, e, r)
+      await record($, e, r, opts.checks)
     } catch (error) {
       debug($, 'tool.call', error)
     }
@@ -195,7 +204,7 @@ export const register: Register = (on, options) => {
     return r
   })
 
-  on('command.run', { command: 'receipts' }, ($, e) => runCommand($, e.args))
+  on('command.run', { command: 'receipts' }, ($, e) => runCommand($, opts, e.args))
 
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => (opts.enabled ? renderBand($, e, next) : next(e)))
 
@@ -213,12 +222,18 @@ export const register: Register = (on, options) => {
 type Render = Parameters<Hook<'ui.render'>>
 
 // `/receipts` opens the pane; its subcommands write the plugin's settings.
-async function runCommand($: Engine, args: string): Promise<{ text: string }> {
+async function runCommand($: Engine, opts: Options, args: string): Promise<{ text: string }> {
   const plan = parseCommand(args)
   if (plan.kind === 'usage') return { text: USAGE }
+  if (plan.kind === 'checks') {
+    const edit = editChecks(opts.checks, plan)
+    if (edit.value === undefined) return { text: edit.text }
+    const written = await $.config.set({ key: 'receipts.checks', value: edit.value })
+    return 'deny' in written && written.deny !== undefined ? { text: `Receipts could not change its checks: ${written.deny}` } : { text: edit.text }
+  }
   if (plan.kind === 'open') {
-    await openPane($)
-    return { text: 'Receipts pane opened.' }
+    // The command's own answer says when the pane waits undrawn, and why.
+    return { text: (await openPane($)) ?? 'Receipts pane opened.' }
   }
   const result = await $.config.set({ key: plan.key, value: plan.value })
   return 'deny' in result && result.deny !== undefined ? { text: `Receipts could not change ${plan.key}: ${result.deny}` } : { text: plan.done }
@@ -237,7 +252,7 @@ async function renderBand($: Engine, e: Render[1], next: Render[2]) {
   const mine = bandView(
     elements,
     last,
-    (await paneIsUp($)) ? null : () => void openPane($),
+    (await paneIsUp($)) ? null : () => void openDetails($),
     () => void $.state.set(BAND_HIDDEN, true),
   )
   if (e.props.maxRows < 2) return mine
@@ -251,10 +266,18 @@ async function renderBand($: Engine, e: Render[1], next: Render[2]) {
   )
 }
 
-// Opens the pane, then draws the band again without its [Details].
-async function openPane($: Engine): Promise<void> {
-  await $.ui.open({ id: PANE.id, title: PANE.title })
+// Opens the pane, then draws the band again without its [Details]. Answers
+// what to tell the person when the pane waits undrawn (waitingNote), else null.
+async function openPane($: Engine): Promise<string | null> {
+  const opened = await $.ui.open({ id: PANE.id, title: PANE.title })
   $.ui.invalidate('ui.render')
+  return waitingNote(PANE.title, opened)
+}
+
+// The band's [Details]: a pane that waits undrawn says why, once, in a toast.
+async function openDetails($: Engine): Promise<void> {
+  const note = await openPane($)
+  if (note !== null) $.ui.toast(note)
 }
 
 // Whether the pane is open and drawn, by the engine's record: one waiting
@@ -282,7 +305,7 @@ async function isActive($: Engine, opts: Options): Promise<boolean> {
 }
 
 // Records a finished tool call in the ledger: an edit that landed, or a shell run.
-async function record($: Engine, e: { tool: string; agentId?: string } & Record<string, unknown>, r: Record<string, unknown>): Promise<void> {
+async function record($: Engine, e: { tool: string; agentId?: string } & Record<string, unknown>, r: Record<string, unknown>, checks: readonly DeclaredCheck[]): Promise<void> {
   if ('deny' in r && r.deny !== undefined) return
   const at = await $.clock.now()
   if (EDIT_TOOLS.includes(e.tool)) {
@@ -296,13 +319,16 @@ async function record($: Engine, e: { tool: string; agentId?: string } & Record<
   }
   if (e.tool !== 'Bash' && e.tool !== 'PowerShell') return
   const result = r.result as { backgroundTaskId?: string } | undefined
-  const evidence = classify({
-    tool: e.tool,
-    command: String(e.command ?? ''),
-    isError: r.isError === true,
-    text: typeof r.text === 'string' ? r.text : '',
-    backgrounded: typeof result?.backgroundTaskId === 'string' || e.run_in_background === true,
-  })
+  const evidence = classify(
+    {
+      tool: e.tool,
+      command: String(e.command ?? ''),
+      isError: r.isError === true,
+      text: typeof r.text === 'string' ? r.text : '',
+      backgrounded: typeof result?.backgroundTaskId === 'string' || e.run_in_background === true,
+    },
+    checks,
+  )
   await update($, LEDGER, (ledger = emptyLedger()) => recordRun(ledger, evidence, at, e.agentId))
 }
 
@@ -314,7 +340,7 @@ async function judgeOnce($: Engine, opts: Options, turnId: string, startSeq: num
   const key = `${turnId}:${ledger.nextSeq}:${answer.length}:${answer.slice(0, 64)}`
   const { value: judged = null } = await $.state.get(JUDGED)
   if (judged !== null && judged.key === key) return judged.verdict
-  const claims = await confirmClaims($, opts, findClaims(answer))
+  const claims = await confirmClaims($, opts, findClaims(answer, opts.checks))
   const verdict = judge(claims, ledger, startSeq)
   await $.state.set(JUDGED, { key, verdict })
   return verdict

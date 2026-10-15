@@ -3,7 +3,13 @@
 // conditions is not a claim, so Receipts stays quiet rather than nag.
 
 import { normalizeNewlines } from '../shared/ansi.ts'
-import type { Claim } from './types.ts'
+import { checkKindOf } from './evidence.ts'
+import type { Claim, ClaimKind, DeclaredCheck } from './types.ts'
+
+// Inline code stands in the prose as its index between these two private-use
+// characters (blankIgnored), so it never reads as a number of the text.
+const CODE_OPEN = '\uE000'
+const CODE_CLOSE = '\uE001'
 
 // Each pattern is a way of saying "the work is finished".
 const CLAIMS: readonly RegExp[] = [
@@ -25,7 +31,7 @@ const CLAIMS: readonly RegExp[] = [
   /\b(?:it|this|that|everything)\s+(?:now\s+)?(?:works|passes)\b(?!\s+(?:through|to|the|a|an|on|in|into|over|by|for|from|with|along|via)\b)/i,
   /\bready\s+(?:to|for)\s+(?:merge|ship|deploy|release)\b/i,
   // An inline-code command as the subject: "`pnpm verify` passes (422 tests)".
-  /\d+\s+(?:now\s+|still\s+)?(?:passes|passed|succeeds|succeeded|is\s+green|is\s+clean)\b/,
+  /\uE000\d+\uE001\s+(?:now\s+|still\s+)?(?:passes|passed|succeeds|succeeded|is\s+green|is\s+clean)\b/,
 ]
 
 // Whole-sentence closers ("Done.", "**Fixed!**", "All set ✅").
@@ -78,16 +84,20 @@ const TESTS_KIND =
   /\b(?:tests?|specs?|suites?)\b[^.;]{0,40}?\b(?:pass|passes|passed|passing|green|succeed\w*|fail\w*)\b|\b(?:pass|passes|passed|passing)\b[^.;]{0,20}?\b(?:tests?|specs?)\b|\b\d+\s+(?:[\w-]+\s+){0,2}(?:tests?|specs?)\b|\btests?:[*\s]*\d+/i
 // A claim about the build, types or lint, judged by build runs, not by tests.
 const BUILD_KIND = /\b(?:builds?|compiles?|compiled|typechecks?|type-checks?|type\s+check|types|tsc|lint|linter|linting|eslint|ruff|clippy)\b/i
+// Inline code as the claim's subject ("`npm test` now passes", "`tsc` is
+// clean"): the code's placeholder (blankIgnored) right before the success verb.
+const CODE_SUBJECT = /\uE000(\d+)\uE001[*_)]*\s+(?:now\s+|still\s+|also\s+)?(?:passes|passed|succeeds|succeeded|is\s+green|is\s+clean)\b/
 const CONJUNCTION = /\b(?:but|although|except)\b/i
 const MAYBE_WORDS = 25
 
-export function findClaims(text: string): Claim[] {
+// `checks`: the person's declared checks, so "`pnpm verify` passes" takes their kind.
+export function findClaims(text: string, checks: readonly DeclaredCheck[] = []): Claim[] {
   const { prose, codes } = blankIgnored(text)
   const all = sentences(prose)
   if (all.some(disclosesFailure)) return []
   const claims: Claim[] = []
   for (const sentence of all) {
-    const claim = asClaim(sentence, codes)
+    const claim = asClaim(sentence, codes, checks)
     if (claim !== null) claims.push(claim)
   }
   return claims
@@ -97,7 +107,7 @@ function disclosesFailure(sentence: string): boolean {
   return DISCLOSES_FAILURE.some(pattern => pattern.test(sentence)) && !PAST_FAILURE.test(sentence)
 }
 
-function asClaim(sentence: string, codes: readonly string[]): Claim | null {
+function asClaim(sentence: string, codes: readonly string[], checks: readonly DeclaredCheck[]): Claim | null {
   const lead = sentence.replace(/^[\s*_✓✔✅]+/u, '')
   if (IMPERATIVE.test(lead) || IMPERATIVE.test(lead.replace(LEADING_PHRASE, ''))) return null
   if (EXPLANATION.test(lead) || FAILING_TEST_ADDED.test(sentence)) return null
@@ -110,10 +120,18 @@ function asClaim(sentence: string, codes: readonly string[]): Claim | null {
   if (CONDITION.test(sentence.slice(0, at)) || DENIED_REPORT.test(sentence.slice(0, at))) return null
   const words = sentence.split(/\s+/).filter(Boolean).length
   return {
-    sentence: sentence.replace(/(\d+)/g, (_, i: string) => `\`${codes[Number(i)]}\``),
-    kind: TESTS_KIND.test(sentence) ? 'tests' : BUILD_KIND.test(sentence) ? 'build' : 'generic',
+    sentence: sentence.replace(/\uE000(\d+)\uE001/g, (_, i: string) => `\`${codes[Number(i)]}\``),
+    kind: TESTS_KIND.test(sentence) ? 'tests' : BUILD_KIND.test(sentence) ? 'build' : codeSubjectKind(sentence, codes, checks),
     certainty: words > MAYBE_WORDS && CONJUNCTION.test(sentence) ? 'maybe' : 'sure',
   }
+}
+
+// The kind a claim takes from inline code as its subject: the command's own
+// (core/evidence.ts checkKindOf), else generic.
+function codeSubjectKind(sentence: string, codes: readonly string[], checks: readonly DeclaredCheck[]): ClaimKind {
+  const index = CODE_SUBJECT.exec(sentence)?.[1]
+  const code = index === undefined ? undefined : codes[Number(index)]
+  return (code !== undefined ? checkKindOf(code, checks) : null) ?? 'generic'
 }
 
 // Where the claim starts in the sentence, or -1 when there is none.
@@ -166,7 +184,7 @@ function blankIgnored(text: string): { prose: string; codes: string[] } {
       kept.push('')
       continue
     }
-    const unquoted = line.replace(/`([^`]*)`/g, (_, code: string) => `${codes.push(code) - 1}`)
+    const unquoted = line.replace(/`([^`]*)`/g, (_, code: string) => `${CODE_OPEN}${codes.push(code) - 1}${CODE_CLOSE}`)
     kept.push(unquoted.replace(/"[^"]*"|“[^”]*”/g, ' '))
   }
   return { prose: kept.join('\n'), codes }

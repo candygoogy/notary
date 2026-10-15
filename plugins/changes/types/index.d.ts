@@ -42,7 +42,20 @@ export type ChangesIndex = {
 }
 
 // Where this session keeps its snapshots, and the repository it runs in.
-export type ChangesSession = { sessionId: string; store: string; base: string; platform: 'windows' | 'posix'; root: string | null; cwd: string }
+// `token` and `writer`: this process's claim on the conversation's kept
+// history (only the lease holder writes it); `launchedAt`: turns that started
+// before it came from an earlier launch of the conversation.
+export type ChangesSession = {
+  sessionId: string
+  store: string
+  base: string
+  platform: 'windows' | 'posix'
+  root: string | null
+  cwd: string
+  token: string
+  writer: boolean
+  launchedAt: number
+}
 
 // The band after a turn that changed code; null hides it.
 export type ChangesBand = { turnId: string; ordinal: number; files: number } | null
@@ -52,7 +65,8 @@ export type ChangesRevertAsk = { turnId: string; key: string; path: string; mode
 
 // What the pane shows: the selected turn and node, a revert waiting for its
 // confirmation (until `until`), a follow-up the last refusal offers, the last
-// outcome line, and the files whose diffs show every line.
+// outcome line, the files whose diffs show every line, and Revert all's
+// confirmation and per-file offers.
 export type ChangesView = {
   turnId: string | null
   node: string | null
@@ -60,6 +74,10 @@ export type ChangesView = {
   offer: ChangesRevertAsk | null
   notice: string | null
   expanded: string[]
+  // Revert all for one turn, waiting for its confirmation (until `until`).
+  confirmAll: { turnId: string; label: string; until: number } | null
+  // After Revert all, each skipped file's own way on, shown on its row.
+  offers: ChangesRevertAsk[]
 }
 
 declare module 'claude-code' {
@@ -73,6 +91,8 @@ declare module 'claude-code' {
       storeFull: boolean
       autoOpened: boolean
       shellOff: boolean
+      // A line for the pane about the kept history: unreadable, or read-only here.
+      historyNote: string | null
       inactive: boolean
     }
   }

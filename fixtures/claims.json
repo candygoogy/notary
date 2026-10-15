@@ -100,5 +100,10 @@
   { "text": "I didn't break anything, all tests pass.", "expect": [{ "kind": "tests", "certainty": "sure" }], "note": "guard: a negation that is no report ('didn't break') leaves the claim", "source": "constructed" },
   { "text": "I never said otherwise: all tests pass.", "expect": [{ "kind": "tests", "certainty": "sure" }], "note": "guard: the denied report ends at the colon; the claim after it stands", "source": "constructed" },
   { "text": "All tests pass; I didn't say the deploy is done.", "expect": [{ "kind": "tests", "certainty": "sure" }], "note": "guard: a denied report after the claim does not undo it", "source": "constructed" },
-  { "text": "I didn't tell you before, but the build passes now.", "expect": [{ "kind": "build", "certainty": "sure" }], "note": "guard: a denied report in an earlier clause leaves the claim", "source": "constructed" }
+  { "text": "I didn't tell you before, but the build passes now.", "expect": [{ "kind": "build", "certainty": "sure" }], "note": "guard: a denied report in an earlier clause leaves the claim", "source": "constructed" },
+  { "text": "Done. `npm test` now passes.", "expect": [{ "kind": "generic", "certainty": "sure"},{"kind": "tests", "certainty": "sure" }], "note": "smoke 5: a test runner in inline code as the claim's subject takes its kind (was generic: no stamp)", "source": "real" },
+  { "text": "`cargo test` passes.", "expect": [{ "kind": "tests", "certainty": "sure" }], "note": "inline-code subject: cargo test is a tests claim", "source": "constructed" },
+  { "text": "`tsc --noEmit` is clean.", "expect": [{ "kind": "build", "certainty": "sure" }], "note": "inline-code subject: tsc is a build claim", "source": "constructed" },
+  { "text": "`pnpm verify` passes.", "expect": [{ "kind": "generic", "certainty": "sure" }], "note": "guard: an unknown command in inline code stays generic (unless declared as a check)", "source": "constructed" },
+  { "text": "`curl localhost:3000/health` succeeds.", "expect": [{ "kind": "generic", "certainty": "sure" }], "note": "guard: a localhost probe is no build claim", "source": "constructed" }
 ]

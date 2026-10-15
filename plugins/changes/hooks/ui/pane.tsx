@@ -20,10 +20,18 @@ export type PaneInput = {
   expanded: readonly string[]
   confirm: RevertAsk | null
   offer: RevertAsk | null
+  // After Revert all: each skipped file's own way on, drawn on its row.
+  offers: readonly RevertAsk[]
+  // Revert all for the selected turn: offered while a file is pending, armed
+  // after the first press.
+  canRevertAll: boolean
+  confirmAll: { turnId: string; label: string } | null
   notice: string | null
   // Why tracking is paused, when it is.
   paused: string | null
   cwd: string
+  // When this launch began: rows from before it came from an earlier launch.
+  launchedAt: number
   isWindows: boolean
   onSelect: (turnId: string) => void
   onNode: (node: string | null) => void
@@ -31,6 +39,9 @@ export type PaneInput = {
   onRevert: (file: FileChange) => void
   onConfirm: (file: FileChange) => void
   onOffer: () => void
+  onOfferFile: (ask: RevertAsk) => void
+  onRevertAll: (turnId: string) => void
+  onConfirmAll: (turnId: string) => void
   onShowAll: (file: FileChange) => void
 }
 
@@ -45,10 +56,13 @@ export const fileId = (file: Pick<FileChange, 'turnId' | 'key'>) => `${file.turn
 // two-step Revert. Pure: register.tsx computes the diffs and the handlers.
 export function paneView({ Box, Button, Text, Code }: PaneElements, input: PaneInput) {
   const rows = input.rows.filter(r => r.kind === 'action' || r.files.length > 0 || r.untracked.length > 0)
+  // Newest first: the first row from before this launch starts the earlier part.
+  const firstEarlier = rows.findIndex(row => atOf(row) < input.launchedAt)
   const path = (p: string) => shownPath(input.cwd, p, input.isWindows)
   if (rows.length === 0) {
     return (
       <Box key="changes" flexDirection="column">
+        {input.paused !== null ? <Text color="warning">{input.paused}</Text> : null}
         <Text dimColor>No changes yet. Each turn that edits files shows here, with its diffs.</Text>
       </Box>
     )
@@ -82,6 +96,7 @@ export function paneView({ Box, Button, Text, Code }: PaneElements, input: PaneI
       file.edits.some(e => e.via === 'unattributed') ? 'changed during this turn (shell or you)' : null,
     ].filter((n): n is string => n !== null)
     const canAct = file.status !== 'reverted' && !file.isNoop
+    const offer = input.offers.find(o => o.turnId === file.turnId && o.key === file.key)
     return (
       <Box key={`file-${id}`} flexDirection="column" marginBottom={1}>
         <Box key={`head-${id}`} flexDirection="row" gap={1}>
@@ -92,6 +107,7 @@ export function paneView({ Box, Button, Text, Code }: PaneElements, input: PaneI
           {canAct ? <Button key={`keep-${id}`} label={file.status === 'kept' ? 'Undo keep' : 'Keep'} onPress={() => input.onKeep(file)} /> : null}
           {canAct && !isConfirming ? <Button key={`revert-${id}`} label="Revert" onPress={() => input.onRevert(file)} /> : null}
           {canAct && isConfirming ? <Button key={`confirm-${id}`} variant="primary" label={input.confirm!.label} onPress={() => input.onConfirm(file)} /> : null}
+          {canAct && !isConfirming && offer !== undefined ? <Button key={`offer-${id}`} label={offer.label} onPress={() => input.onOfferFile(offer)} /> : null}
         </Box>
         {notes.map((note, i) => (
           <Text key={`note-${id}-${i}`} dimColor>
@@ -116,7 +132,19 @@ export function paneView({ Box, Button, Text, Code }: PaneElements, input: PaneI
           {input.offer !== null ? <Button key="offer" label={input.offer.label} onPress={input.onOffer} /> : null}
         </Box>
       ) : null}
-      {rows.map(row => {
+      {rows.flatMap((row, i) => (i === firstEarlier ? [earlierDivider(row), rowView(row)] : [rowView(row)]))}
+    </Box>
+  )
+
+  function earlierDivider(row: TimelineRow) {
+    return (
+      <Text key="earlier" dimColor>
+        ── Earlier · {whenOf(atOf(row))} ──
+      </Text>
+    )
+  }
+
+  function rowView(row: TimelineRow) {
         if (row.kind === 'action') {
           const verb = row.action.kind === 'revert' ? 'reverted' : row.action.kind === 'keep' ? 'kept' : 'unkept'
           return (
@@ -131,6 +159,11 @@ export function paneView({ Box, Button, Text, Code }: PaneElements, input: PaneI
         return (
           <Box key={`turn-${turn.turnId}`} flexDirection="column">
             <Button key={`select-${turn.turnId}`} plain label={`${isOpen ? '▾' : '▸'} ${title} · ${files.length} ${files.length === 1 ? 'file' : 'files'}`} onPress={() => input.onSelect(turn.turnId)} />
+            {isOpen && turn.kind === 'turn' && input.confirmAll?.turnId === turn.turnId ? (
+              <Button key={`confirmall-${turn.turnId}`} variant="primary" label={`    ${input.confirmAll.label}`} onPress={() => input.onConfirmAll(turn.turnId)} />
+            ) : isOpen && turn.kind === 'turn' && input.canRevertAll ? (
+              <Button key={`revertall-${turn.turnId}`} label={`    Revert all (#${turn.ordinal})`} onPress={() => input.onRevertAll(turn.turnId)} />
+            ) : null}
             {isOpen && nodes.length > 1 ? (
               <Button key="node-all" plain label={`    ${input.node === null ? '●' : '○'} all steps`} onPress={() => input.onNode(null)} />
             ) : null}
@@ -145,7 +178,18 @@ export function paneView({ Box, Button, Text, Code }: PaneElements, input: PaneI
             {isOpen ? input.files.map(fileBlock) : null}
           </Box>
         )
-      })}
-    </Box>
-  )
+  }
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+// "Oct 12, 14:05", in the time zone the mod runs in.
+function whenOf(ms: number): string {
+  const d = new Date(ms)
+  const two = (n: number) => String(n).padStart(2, '0')
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${two(d.getHours())}:${two(d.getMinutes())}`
+}
+
+function atOf(row: TimelineRow): number {
+  return row.kind === 'action' ? row.action.at : row.turn.startedAt
 }

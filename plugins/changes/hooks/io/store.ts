@@ -1,10 +1,14 @@
 // The session folders under `<config>/plugin-data/notary-changes/` (spec §5.6):
-// a `.touch` file marks a folder alive; session.end removes its own folder,
-// session.start removes folders untouched for a week (a crash skips the end).
+// a `.touch` file marks a folder used. A conversation's folder is kept after
+// its end for a resume (keepHistoryDays, docs/notes/changes-history-persist.md);
+// session.start removes folders unused for that long, then the oldest while
+// all of them together pass the total cap.
 
 import type { Platform, Ports } from './ports.ts'
 
-export const STALE_MS = 7 * 24 * 60 * 60 * 1000
+export const DAY_MS = 24 * 60 * 60 * 1000
+// How long a folder nobody ended (a crash) is kept, with keepHistoryDays 0.
+export const STALE_MS = 7 * DAY_MS
 // Snapshots one session may keep; past it, new ones are not saved.
 export const STORE_CAP_BYTES = 500 * 1024 * 1024
 const REMOVE_TIMEOUT_MS = 20_000
@@ -19,8 +23,8 @@ export async function touch(io: Ports, store: string, now: number): Promise<void
 }
 
 // The session folders under `base` last touched (or, with no mark, last
-// changed) before `now - STALE_MS`, never `keep` (this session's own).
-export async function staleSessions(io: Ports, base: string, keep: string, now: number): Promise<string[]> {
+// changed) before `now - keepFor`, never `keep` (this session's own).
+export async function staleSessions(io: Ports, base: string, keep: string, now: number, keepFor = STALE_MS): Promise<string[]> {
   let entries: Awaited<ReturnType<Ports['fs']['list']>>
   try {
     entries = await io.fs.list(base)
@@ -34,12 +38,54 @@ export async function staleSessions(io: Ports, base: string, keep: string, now: 
     if (dir === keep) continue
     try {
       const mark = (await io.fs.exists(`${dir}/.touch`)) ? await io.fs.stat(`${dir}/.touch`) : await io.fs.stat(dir)
-      if (mark.mtimeMs > 0 && mark.mtimeMs < now - STALE_MS) stale.push(dir)
+      if (mark.mtimeMs > 0 && mark.mtimeMs < now - keepFor) stale.push(dir)
     } catch {
       // Unreadable: leave it.
     }
   }
   return stale
+}
+
+// The kept folders to remove, oldest used first, until all of them together
+// (copies and saved history) fit in `cap`. Never `keep`, this session's own,
+// though its size counts.
+export async function overTotalCap(io: Ports, base: string, keep: string, cap: number): Promise<string[]> {
+  let entries: Awaited<ReturnType<Ports['fs']['list']>>
+  try {
+    entries = await io.fs.list(base)
+  } catch {
+    return []
+  }
+  const folders: Array<{ dir: string; used: number; size: number }> = []
+  let total = 0
+  for (const entry of entries) {
+    if (entry.kind !== 'dir') continue
+    const dir = `${base}/${entry.name}`
+    const size = (await storeUsage(io, dir)) + (await historySize(io, dir))
+    total += size
+    if (dir === keep) continue
+    try {
+      const mark = (await io.fs.exists(`${dir}/.touch`)) ? await io.fs.stat(`${dir}/.touch`) : await io.fs.stat(dir)
+      folders.push({ dir, used: mark.mtimeMs, size })
+    } catch {
+      // Unreadable: leave it.
+    }
+  }
+  const over: string[] = []
+  for (const folder of folders.sort((a, b) => a.used - b.used)) {
+    if (total <= cap) break
+    over.push(folder.dir)
+    total -= folder.size
+  }
+  return over
+}
+
+async function historySize(io: Ports, dir: string): Promise<number> {
+  try {
+    return (await io.fs.exists(`${dir}/index.json`)) ? (await io.fs.stat(`${dir}/index.json`)).size : 0
+  } catch {
+    return 0
+  }
 }
 
 // The bytes of saved copies in a session's store.

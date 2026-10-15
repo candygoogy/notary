@@ -1,11 +1,11 @@
-import type { EngineInterface as Engine, Hook, Register } from 'claude-code'
+import type { EngineInterface as Engine, Hook, Register, Timer } from 'claude-code'
 import { update } from 'claude-code'
 
 import { emptyIndex, statusKey, type Content, type Index } from './core/model.ts'
 import { isCodePath } from './core/noise.ts'
 import { relativeTo, shownPath } from './core/paths.ts'
 import { unexplained } from './core/sweep.ts'
-import { planRevert } from './core/revert-plan.ts'
+import type { RevertPlan, RevertRef } from './core/revert-plan.ts'
 import {
   addAction,
   addEdit,
@@ -25,14 +25,16 @@ import {
 } from './core/timeline.ts'
 import { capture, keyOf, storeDirOf, type StoreBudget } from './io/blobs.ts'
 import { diffOf, type DiffView } from './io/diffs.ts'
+import { holdsLease, LEASE_RENEW_MS, loadHistory, releaseLease, renewLease, saveHistory, takeLease } from './io/history.ts'
 import { cleanBlobOf, gitBudget, repoRootOf } from './io/git.ts'
 import { platformOf, type Ports } from './io/ports.ts'
-import { revertFile, type RevertOutcome } from './io/restore.ts'
+import { planFile, planTurn, revertFile, revertTurn, type RevertOutcome, type TurnFile } from './io/restore.ts'
+import { waitingNote } from './shared/pane.ts'
 import { shellAfter, shellBefore, type ShellToken, type SnapshotCache } from './io/shell.ts'
-import { removeTree, staleSessions, STORE_CAP_BYTES, storeUsage, touch } from './io/store.ts'
+import { DAY_MS, overTotalCap, removeTree, staleSessions, STALE_MS, STORE_CAP_BYTES, storeUsage, touch } from './io/store.ts'
 import { bandView } from './ui/band.tsx'
-import { revertNotice } from './ui/notice.ts'
-import { paneView } from './ui/pane.tsx'
+import { revertAllNotice, revertAllPlanNotice, revertNotice } from './ui/notice.ts'
+import { paneView, type RevertAsk } from './ui/pane.tsx'
 
 // Wiring only (spec §5): events in, core and io calls, state out. Observers
 // always hand back what `next` resolved to; a failure here means "this change
@@ -56,11 +58,25 @@ const INACTIVE = { plugin: 'changes', key: 'inactive' } as const
 const STORE_FULL = { plugin: 'changes', key: 'storeFull' } as const
 const AUTO_OPENED = { plugin: 'changes', key: 'autoOpened' } as const
 const SHELL_OFF = { plugin: 'changes', key: 'shellOff' } as const
+const HISTORY_NOTE = { plugin: 'changes', key: 'historyNote' } as const
 
 const PANE = { id: 'changes', title: 'Changes' } as const
 
-type Options = { enabled: boolean; band: boolean; autoOpen: boolean; tellClaude: boolean; trackShell: boolean }
-type Session = { sessionId: string; store: string; base: string; platform: 'windows' | 'posix'; root: string | null; cwd: string }
+type Options = { enabled: boolean; band: boolean; autoOpen: boolean; tellClaude: boolean; trackShell: boolean; keepHistoryDays: number }
+// `token`: this process's claim on the conversation's lease; `writer`: whether
+// it holds the lease, so saves the history; `launchedAt`: turns that started
+// before it came from an earlier launch.
+type Session = {
+  sessionId: string
+  store: string
+  base: string
+  platform: 'windows' | 'posix'
+  root: string | null
+  cwd: string
+  token: string
+  writer: boolean
+  launchedAt: number
+}
 type Render = Parameters<Hook<'ui.render'>>
 
 // Per module copy, rebuilt after a hot reload: the turn sweep's baseline (a
@@ -86,6 +102,14 @@ let indexSize = -1
 let savesSinceMeasure = 0
 const FULL_MEASURE_EVERY = 100
 const SHELL_OFF_NOTE = "git is slow here; shell changes aren't tracked this session"
+// Renews the lease while this process holds it; stopped at the session's end.
+let heartbeat: Timer | null = null
+// keepHistoryDays as this module was registered with (register sets it).
+let keepHistoryDays = 7
+const READ_ONLY_NOTE = 'This conversation is also open in another Claude Code window. Its history shows here, but changes made here are not saved to it.'
+const UNREADABLE_NOTE = 'The history saved for this conversation could not be read, so it starts empty here.'
+// Every kept history together, oldest dropped first past it.
+const TOTAL_CAP_BYTES = 1024 * 1024 * 1024
 
 export const register: Register = (on, options) => {
   const opts: Options = {
@@ -94,12 +118,18 @@ export const register: Register = (on, options) => {
     autoOpen: options.autoOpen === true,
     tellClaude: options.tellClaude !== false,
     trackShell: options.trackShell !== false,
+    keepHistoryDays: typeof options.keepHistoryDays === 'number' && options.keepHistoryDays >= 0 ? Math.floor(options.keepHistoryDays) : 7,
   }
+  keepHistoryDays = opts.keepHistoryDays
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     try {
-      await $.command.register({ name: 'changes', description: 'Open the Changes pane: what Claude changed, turn by turn, with keep and revert.' })
+      await $.command.register({
+        name: 'changes',
+        description: 'Open the Changes pane: what Claude changed, turn by turn, with keep and revert. /changes forget deletes this conversation\'s kept history.',
+        argumentHint: '[forget]',
+      })
     } catch (error) {
       debug($, 'session.start', error)
     }
@@ -172,6 +202,7 @@ export const register: Register = (on, options) => {
       await saveIndex($, index => closeTurn(index, { turnId: e.turnId, at, reason: e.reason }))
       await sweepTurn($, session, e.turnId)
       await showBand($, opts, session, e.turnId)
+      await persist($)
     } catch (error) {
       debug($, 'turn.complete', error)
     }
@@ -190,13 +221,19 @@ export const register: Register = (on, options) => {
 
   on('session.end', async ($, e, next) => {
     const r = await next(e)
-    // Every end, a /clear and a resume included, ends this session's history:
-    // its snapshots go, and so does the index, whether or not the host would
-    // have kept $.state. A /clear or resume goes on in the same process, so
-    // the next hook starts a fresh session (no session.start follows a /clear).
+    // The history is kept on disk for a resume (keepHistoryDays): the end only
+    // gives the lease up and marks the folder used, within the end's short
+    // bound. With keepHistoryDays 0 the copies go, as before. A /clear or
+    // resume goes on in the same process, so the next hook starts the session
+    // it continues with (no session.start follows a /clear).
+    stopHeartbeat()
     try {
       const { value: session = null } = await $.state.get(SESSION)
-      if (session !== null) await removeTree(portsOf($), session.platform, session.store)
+      if (session !== null && opts.keepHistoryDays === 0) await removeTree(portsOf($), session.platform, session.store)
+      else if (session !== null) {
+        if (session.writer) await releaseLease(portsOf($), session.store, session.token)
+        await touch(portsOf($), session.store, await $.clock.now())
+      }
       if (e.reason === 'clear' || e.reason === 'resume') await resetHistory($)
     } catch (error) {
       debug($, 'session.end', error)
@@ -204,9 +241,11 @@ export const register: Register = (on, options) => {
     return r
   })
 
-  on('command.run', { command: 'changes' }, async $ => {
-    await openPane($)
-    return { text: 'Changes pane opened.' }
+  // `/changes` opens the pane: its answer says when the pane waits undrawn,
+  // and why. `/changes forget` deletes this conversation's kept history.
+  on('command.run', { command: 'changes' }, async ($, e) => {
+    if (e.args.trim().toLowerCase() === 'forget') return { text: await forget($) }
+    return { text: (await openPane($)) ?? 'Changes pane opened.' }
   })
 
   // The band's [Open] shows only while the pane is shut: closing it (the
@@ -267,6 +306,7 @@ async function startSession($: Engine, opts: Options): Promise<void> {
     lastTouch = now
     storeBudget.used = await storeUsage(io, existing.store)
     storeMeasured = true
+    startHeartbeat($, opts)
     return
   }
   const sessionId = (await $.session.id()).trim()
@@ -283,13 +323,94 @@ async function startSession($: Engine, opts: Options): Promise<void> {
   const platform = platformOf(await $.env.get('OS'))
   const cwd = (await $.session.root()).replace(/\\/g, '/')
   const root = opts.trackShell ? await repoRootOf(io, cwd) : null
-  await $.state.set(SESSION, { sessionId, store, base, platform, root, cwd })
   const now = await $.clock.now()
+  const token = `${sessionId}:${now}:${Math.random().toString(36).slice(2)}`
+  // A conversation resumed (same id) finds its history where it was kept. One
+  // process writes it: the lease holder; another shows it read-only.
+  let writer = false
+  let note: string | null = null
+  if (opts.keepHistoryDays > 0) {
+    writer = await takeLease(io, store, token, now)
+    const loaded = await loadHistory(io, store, sessionId)
+    if (loaded !== null && 'index' in loaded) await saveIndex($, () => loaded.index)
+    else if (loaded !== null) note = UNREADABLE_NOTE
+    if (!writer) note = note === null ? READ_ONLY_NOTE : `${note} ${READ_ONLY_NOTE}`
+  }
+  await $.state.set(SESSION, { sessionId, store, base, platform, root, cwd, token, writer, launchedAt: now })
+  await $.state.set(HISTORY_NOTE, note)
   await touch(io, store, now)
   lastTouch = now
   storeBudget.used = await storeUsage(io, store)
   storeMeasured = true
-  for (const dir of await staleSessions(io, base, store, now)) await removeTree(io, platform, dir)
+  // Histories unused for keepHistoryDays (crash leftovers: a week) go, then
+  // the oldest while all of them together pass the total cap.
+  const keepFor = opts.keepHistoryDays > 0 ? opts.keepHistoryDays * DAY_MS : STALE_MS
+  for (const dir of await staleSessions(io, base, store, now, keepFor)) await removeTree(io, platform, dir)
+  for (const dir of await overTotalCap(io, base, store, TOTAL_CAP_BYTES)) await removeTree(io, platform, dir)
+  startHeartbeat($, opts)
+}
+
+// Saves the history for a resume, while this process holds the lease. A
+// lease taken over meanwhile (this process was idle past LEASE_STALE_MS and
+// another took it) is seen here, before anything is written: from then on
+// this process shows the history read-only.
+async function persist($: Engine): Promise<void> {
+  if (keepHistoryDays === 0) return
+  try {
+    const { value: session = null } = await $.state.get(SESSION)
+    if (session === null || !session.writer) return
+    const io = portsOf($)
+    if (!(await holdsLease(io, session.store, session.token))) {
+      await loseLease($, session)
+      return
+    }
+    const { value: index = emptyIndex() } = await $.state.get(INDEX)
+    if (!(await saveHistory(io, session.platform, session.store, session.sessionId, index as Index, await $.clock.now()))) {
+      debug($, 'history', new Error('the history could not be saved for a resume'))
+    }
+  } catch (error) {
+    debug($, 'history', error)
+  }
+}
+
+async function loseLease($: Engine, session: Session): Promise<void> {
+  await $.state.set(SESSION, { ...session, writer: false })
+  await $.state.set(HISTORY_NOTE, READ_ONLY_NOTE)
+}
+
+// The heartbeat keeps a live holder's lease fresh, so an idle window keeps it
+// and only a crashed one's goes stale.
+function startHeartbeat($: Engine, opts: Options): void {
+  if (heartbeat !== null || opts.keepHistoryDays === 0) return
+  heartbeat = $.clock.every(LEASE_RENEW_MS, () => void beat($))
+}
+
+async function beat($: Engine): Promise<void> {
+  try {
+    const { value: session = null } = await $.state.get(SESSION)
+    if (session === null || !session.writer) return
+    if (!(await renewLease(portsOf($), session.store, session.token, await $.clock.now()))) await loseLease($, session)
+  } catch (error) {
+    debug($, 'lease', error)
+  }
+}
+
+function stopHeartbeat(): void {
+  heartbeat?.cancel()
+  heartbeat = null
+}
+
+// /changes forget: this conversation's kept history and copies are deleted
+// now; the next hook starts it again, empty. Refused while another window
+// holds the lease: it would be deleting under that window.
+async function forget($: Engine): Promise<string> {
+  const { value: session = null } = await $.state.get(SESSION)
+  if (session === null) return 'There is no history to forget.'
+  if (!session.writer) return 'This conversation is open in another Claude Code window. Forget it there.'
+  stopHeartbeat()
+  const removed = await removeTree(portsOf($), session.platform, session.store)
+  await resetHistory($)
+  return removed ? "Changes deleted this conversation's history and its saved copies." : 'Changes could not delete the saved copies. Try again, or delete the folder by hand.'
 }
 
 // Shell writes are tracked in a repository, with the setting on, until git
@@ -337,6 +458,7 @@ async function resetHistory($: Engine): Promise<void> {
   await $.state.set(SESSION, null)
   await $.state.set(PAUSED, null)
   await $.state.set(STORE_FULL, false)
+  await $.state.set(HISTORY_NOTE, null)
   indexSize = -1
   savesSinceMeasure = 0
   sweepToken = null
@@ -571,6 +693,7 @@ async function touchStore($: Engine, session: Session, now: number): Promise<voi
 async function keepFile($: Engine, turnId: string, key: string, path: string, kept: boolean): Promise<void> {
   const at = await $.clock.now()
   await saveIndex($, index => addAction(setStatus(index, [{ turnId, key }], kept ? 'kept' : 'pending'), { kind: kept ? 'keep' : 'undo-keep', turnIds: [turnId], key, path, at }))
+  await persist($)
 }
 
 async function revertFromPane(
@@ -593,22 +716,30 @@ async function revertFromPane(
   // The file changed back: whatever happens to the history, Claude is told.
   const at = await $.clock.now()
   const saved = await saveIndex($, current => recordRevert(current, { key: ref.key, path: last.path, before: outcome.before, after: outcome.after, refs: outcome.refs, at }))
-  if (opts.tellClaude) {
-    try {
-      // The history starts fresh at every /clear, so its turn numbers are
-      // the conversation's own; a background agent's bucket has none.
-      const turns = outcome.refs
-        .map(r => index.turns.find(t => t.turnId === r.turnId))
-        .filter(t => t !== undefined && t.kind === 'turn')
-        .map(t => `#${t!.ordinal}`)
-      const before = turns.length === outcome.refs.length && turns.length > 0 ? `turn ${turns.join(', ')}` : 'an earlier turn'
-      const text = `The user reverted ${last.path} to its state before ${before} using the Changes pane. Re-read the file before editing it.`
-      await $.session.append({ message: { type: 'user', content: [{ type: 'text', text }] } })
-    } catch (error) {
-      debug($, 'revert note', error)
-    }
-  }
+  if (opts.tellClaude) await tellReverted($, index, [last.path], outcome.refs)
+  await persist($)
   return { outcome, saved }
+}
+
+// One hidden note to Claude for the files a revert changed back, however many.
+async function tellReverted($: Engine, index: Index, paths: string[], refs: RevertRef[]): Promise<void> {
+  try {
+    // The history starts fresh at every /clear, so its turn numbers are
+    // the conversation's own; a background agent's bucket has none.
+    const turnIds = [...new Set(refs.map(r => r.turnId))]
+    const turns = turnIds
+      .map(id => index.turns.find(t => t.turnId === id))
+      .filter(t => t !== undefined && t.kind === 'turn')
+      .map(t => `#${t!.ordinal}`)
+    const before = turns.length === turnIds.length && turns.length > 0 ? `turn ${turns.join(', ')}` : 'an earlier turn'
+    const text =
+      paths.length === 1
+        ? `The user reverted ${paths[0]} to its state before ${before} using the Changes pane. Re-read the file before editing it.`
+        : `The user reverted these files to their state before ${before} using the Changes pane: ${paths.join(', ')}. Re-read them before editing them.`
+    await $.session.append({ message: { type: 'user', content: [{ type: 'text', text }] } })
+  } catch (error) {
+    debug($, 'revert note', error)
+  }
 }
 
 function noteLayout(viewport: { columns: number; isFullscreen?: boolean } | undefined): void {
@@ -640,15 +771,20 @@ async function renderBand($: Engine, opts: Options, e: Render[1], next: Render[2
   )
 }
 
+// The band's [Open]: the pane opens first, straight from the press, then
+// selects the turn. A pane that waits undrawn says why, once, in a toast.
 async function openOnTurn($: Engine, turnId: string): Promise<void> {
-  await update($, VIEW, (v = NO_VIEW) => ({ ...v, turnId, node: null, confirm: null, offer: null }))
-  await openPane($)
+  const note = await openPane($)
+  if (note !== null) $.ui.toast(note)
+  await update($, VIEW, (v = NO_VIEW) => ({ ...v, turnId, node: null, confirm: null, offer: null, confirmAll: null }))
 }
 
-// Opens the pane, then draws the band again without its [Open].
-async function openPane($: Engine): Promise<void> {
-  await $.ui.open({ id: PANE.id, title: PANE.title })
+// Opens the pane, then draws the band again without its [Open]. Answers what
+// to tell the person when the pane waits undrawn (waitingNote), else null.
+async function openPane($: Engine): Promise<string | null> {
+  const opened = await $.ui.open({ id: PANE.id, title: PANE.title })
   $.ui.invalidate('ui.render')
+  return waitingNote(PANE.title, opened)
 }
 
 // Whether the pane is open and drawn, by the engine's record: one waiting
@@ -677,15 +813,19 @@ async function renderPane($: Engine, opts: Options, e: Render[1], next: Render[2
   // A draw only reads diffs already computed: the rest show as loading, and
   // one fetch runs off the draw, then draws again.
   const { diffs, missing } = cachedDiffs(files, view.expanded)
+  // Revert all is offered while the selected turn has a file still pending.
+  const pending = selected === null ? 0 : pendingFiles(index, selected).length
   if (session !== null && missing.length > 0 && !fetchingDiffs) {
     fetchingDiffs = true
     $.clock.after(0, () => void fetchDiffs($, session, missing))
   }
   const { value: shellOff = false } = await $.state.get(SHELL_OFF)
+  const { value: historyNote = null } = await $.state.get(HISTORY_NOTE)
   const notes = [
     paused,
     storeFull ? 'Snapshots are paused: this session saved 500 MB of copies. New changes are listed but cannot be reverted.' : null,
     shellOff ? `Shell commands: ${SHELL_OFF_NOTE}.` : null,
+    historyNote,
   ].filter((n): n is string => n !== null)
   return paneView($.ui.resolve(e), {
     rows,
@@ -696,9 +836,13 @@ async function renderPane($: Engine, opts: Options, e: Render[1], next: Render[2
     expanded: view.expanded,
     confirm: view.confirm,
     offer: view.offer,
+    offers: view.offers,
+    confirmAll: view.confirmAll,
+    canRevertAll: pending > 0,
     notice: view.notice,
     paused: notes.length > 0 ? notes.join(' ') : null,
     cwd: session?.cwd ?? '',
+    launchedAt: session?.launchedAt ?? 0,
     isWindows: session?.platform === 'windows',
     onSelect: turnId => void selectTurn($, turnId),
     onNode: node => void selectNode($, node),
@@ -706,11 +850,14 @@ async function renderPane($: Engine, opts: Options, e: Render[1], next: Render[2
     onRevert: file => void armRevert($, { turnId: file.turnId, key: file.key, path: file.path }, 'turn', false),
     onConfirm: file => void confirmRevert($, opts, file),
     onOffer: () => void armOffer($),
+    onOfferFile: ask => void armFileOffer($, ask),
+    onRevertAll: turnId => void armRevertAll($, turnId),
+    onConfirmAll: turnId => void confirmRevertAll($, opts, turnId),
     onShowAll: file => void update($, VIEW, (v = NO_VIEW) => ({ ...v, expanded: [...new Set([...v.expanded, statusKey(file.turnId, file.key)])] })),
   })
 }
 
-const NO_VIEW = { turnId: null, node: null, confirm: null, offer: null, notice: null, expanded: [] as string[] }
+const NO_VIEW = { turnId: null, node: null, confirm: null, offer: null, notice: null, expanded: [] as string[], confirmAll: null, offers: [] as RevertAsk[] }
 const MAX_DIFF_FILES = 12
 const MAX_DIFF_CHARS = 80_000
 const CONFIRM_MS = 5_000
@@ -783,7 +930,7 @@ function contentId(content: Content): string {
 }
 
 async function selectTurn($: Engine, turnId: string): Promise<void> {
-  await update($, VIEW, (v = NO_VIEW) => (v.turnId === turnId ? v : { ...v, turnId, node: null, confirm: null, offer: null }))
+  await update($, VIEW, (v = NO_VIEW) => (v.turnId === turnId ? v : { ...v, turnId, node: null, confirm: null, offer: null, confirmAll: null }))
 }
 
 async function selectNode($: Engine, node: string | null): Promise<void> {
@@ -799,7 +946,7 @@ async function armRevert($: Engine, ask: { turnId: string; key: string; path: st
   const { value: stored = emptyIndex() } = await $.state.get(INDEX)
   const index = stored as Index
   const current = await capture(portsOf($), session.store, ask.path, { store: false })
-  const plan = planRevert(index, { turnId: ask.turnId, key: ask.key }, mode, current, { acceptOutsideChanges: accept })
+  const plan = await planFile(portsOf($), turnContext(session), index, { turnId: ask.turnId, key: ask.key }, mode, current, { acceptOutsideChanges: accept })
   const name = turnNamer(index)
   const shown = shownPath(session.cwd, ask.path, session.platform === 'windows')
   const now = await $.clock.now()
@@ -814,14 +961,143 @@ async function armRevert($: Engine, ask: { turnId: string; key: string; path: st
     return
   }
   const notice = revertNotice(plan, shown, name)
-  const isLink = plan.reason === 'user-changed-between' || plan.reason === 'unverifiable-link' || plan.reason === 'history-trimmed'
-  const offer =
-    plan.reason === 'changed-since'
-      ? { ...ask, mode: 'turnAndLater' as const, accept, label: `Revert with ${plan.otherTurns.map(name).join(', ')}` }
-      : isLink
-        ? { ...ask, mode, accept: true, label: 'Revert anyway' }
-        : null
+  const offer = offerFor(plan, ask, mode, accept, name)
   await update($, VIEW, (v = NO_VIEW) => ({ ...v, confirm: null, offer, notice }))
+}
+
+// The way on that a refusal offers, if any: the later turns together, or, past
+// a link that can't be confirmed, anyway. Always one file at a time.
+function offerFor(
+  plan: Exclude<RevertPlan, { ok: true }>,
+  ask: { turnId: string; key: string; path: string },
+  mode: 'turn' | 'turnAndLater',
+  accept: boolean,
+  name: (turnId: string) => string,
+): RevertAsk | null {
+  const file = { turnId: ask.turnId, key: ask.key, path: ask.path }
+  if (plan.reason === 'changed-since') return { ...file, mode: 'turnAndLater', accept, label: `Revert with ${plan.otherTurns.map(name).join(', ')}` }
+  const isLink = plan.reason === 'user-changed-between' || plan.reason === 'unverifiable-link' || plan.reason === 'history-trimmed'
+  return isLink ? { ...file, mode, accept: true, label: 'Revert anyway' } : null
+}
+
+// A file's own offer after Revert all, pressed: plan it again and arm its confirm.
+async function armFileOffer($: Engine, ask: RevertAsk): Promise<void> {
+  await update($, VIEW, (v = NO_VIEW) => ({ ...v, offers: v.offers.filter(o => o.turnId !== ask.turnId || o.key !== ask.key) }))
+  await armRevert($, ask, ask.mode, ask.accept)
+}
+
+// The turn's files Revert all acts on: changed, not reverted, not kept.
+function pendingFiles(index: Index, turnId: string): FileChange[] {
+  return turnFiles(index, turnId).filter(f => !f.isNoop && f.status === 'pending')
+}
+
+function keptFiles(index: Index, turnId: string): FileChange[] {
+  return turnFiles(index, turnId).filter(f => !f.isNoop && f.status === 'kept')
+}
+
+function turnFilesOf(session: Session, files: FileChange[]): TurnFile[] {
+  return files.map(f => {
+    const rel = session.root === null ? undefined : relativeTo(session.root, f.path, session.platform === 'windows')
+    return { turnId: f.turnId, key: f.key, path: f.path, ...(rel !== undefined ? { rel } : {}) }
+  })
+}
+
+function turnContext(session: Session) {
+  return { platform: session.platform, store: session.store, ...(session.root !== null ? { root: session.root } : {}) }
+}
+
+// The first press of Revert all: plan every pending file against the disk as
+// it is now, write nothing. The confirm says how many files it writes and
+// skips; the notice says why each skipped one is.
+async function armRevertAll($: Engine, turnId: string): Promise<void> {
+  const { value: session = null } = await $.state.get(SESSION)
+  if (session === null) return
+  const { value: stored = emptyIndex() } = await $.state.get(INDEX)
+  const index = stored as Index
+  const name = turnNamer(index)
+  const shown = (p: string) => shownPath(session.cwd, p, session.platform === 'windows')
+  const plans = await planTurn(portsOf($), turnContext(session), index, turnFilesOf(session, pendingFiles(index, turnId)))
+  const writes = plans.filter(p => p.plan.ok).length
+  const skipped = [
+    ...plans.flatMap(p => (p.plan.ok ? [] : [{ path: shown(p.file.path), why: p.plan as RevertOutcome }])),
+    ...keptFiles(index, turnId).map(f => ({ path: shown(f.path), why: 'kept' as const })),
+  ]
+  const notice = revertAllPlanNotice({ turn: name(turnId), skipped, writes }, name)
+  const now = await $.clock.now()
+  const label = `Confirm revert all (${name(turnId)}): write ${writes}, skip ${skipped.length}`
+  await update($, VIEW, (v = NO_VIEW) => ({
+    ...v,
+    confirm: null,
+    offer: null,
+    confirmAll: writes > 0 ? { turnId, label, until: now + CONFIRM_MS } : null,
+    notice: notice === '' ? null : notice,
+  }))
+}
+
+// The second press: the revertible files are written one by one, each saved
+// as a single revert is (recordRevert) before the next; a refusal skips its
+// file and offers its own way on, on its row; a write that did not land stops
+// the run (io/restore.ts revertTurn). Claude gets one note for all the files.
+async function confirmRevertAll($: Engine, opts: Options, turnId: string): Promise<void> {
+  const { value: view = NO_VIEW } = await $.state.get(VIEW)
+  const ask = view.confirmAll
+  if (ask === null || ask.turnId !== turnId || reverting) return
+  reverting = true
+  let notice: string
+  let offers: RevertAsk[] = []
+  try {
+    const isLate = (await $.clock.now()) > ask.until
+    await update($, VIEW, (v = NO_VIEW) => ({ ...v, confirm: null, offer: null, confirmAll: null, offers: [], notice: isLate ? v.notice : 'Reverting…' }))
+    const { value: session = null } = await $.state.get(SESSION)
+    if (isLate) notice = 'The confirmation timed out: press Revert all again.'
+    else if (session === null) notice = 'Nothing to revert: this session keeps no history.'
+    else ({ notice, offers } = await revertAllFromPane($, opts, session, turnId))
+  } catch (error) {
+    debug($, 'revert all', error)
+    notice = 'Revert all stopped with an error: check the files before going on.'
+  } finally {
+    reverting = false
+  }
+  await update($, VIEW, (v = NO_VIEW) => ({ ...v, confirmAll: null, notice, offers }))
+}
+
+async function revertAllFromPane($: Engine, opts: Pick<Options, 'tellClaude'>, session: Session, turnId: string): Promise<{ notice: string; offers: RevertAsk[] }> {
+  const { value: stored = emptyIndex() } = await $.state.get(INDEX)
+  const index = stored as Index
+  const name = turnNamer(index)
+  const shown = (p: string) => shownPath(session.cwd, p, session.platform === 'windows')
+  let saved = true
+  const result = await revertTurn(portsOf($), turnContext(session), index, turnFilesOf(session, pendingFiles(index, turnId)), async (file, outcome) => {
+    const at = await $.clock.now()
+    const ok = await saveIndex($, current => recordRevert(current, { key: file.key, path: file.path, before: outcome.before, after: outcome.after, refs: outcome.refs, at }))
+    saved = saved && ok
+    const { value: now = emptyIndex() } = await $.state.get(INDEX)
+    return now as Index
+  })
+  let notice = revertAllNotice(
+    {
+      turn: name(turnId),
+      reverted: result.reverted.map(r => shown(r.file.path)),
+      skipped: [
+        ...result.skipped.map(r => ({ path: shown(r.file.path), why: r.outcome as RevertOutcome })),
+        ...keptFiles(index, turnId).map(f => ({ path: shown(f.path), why: 'kept' as const })),
+      ],
+      stopped: result.stopped === null ? null : shown(result.stopped.path),
+      notTried: result.notTried.length,
+    },
+    name,
+  )
+  if (result.reverted.length > 0 && !saved) notice += " Some of that history couldn't be saved."
+  const offers = result.skipped.flatMap(r => {
+    if (r.outcome.reason === 'io') return []
+    const offer = offerFor(r.outcome, r.file, 'turn', false, name)
+    return offer === null ? [] : [offer]
+  })
+  if (opts.tellClaude && result.reverted.length > 0) {
+    await tellReverted($, index, result.reverted.map(r => r.file.path), result.reverted.flatMap(r => r.outcome.refs))
+  }
+  await persist($)
+  return { notice, offers }
 }
 
 // A refusal's offer pressed: plan again with its mode, then confirm as usual.

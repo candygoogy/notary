@@ -31,3 +31,35 @@ export function revertNotice(outcome: RevertOutcome, path: string, turnName: (tu
       return `Reverting ${path} could not be confirmed: check the file before going on.`
   }
 }
+
+// A whole-turn revert, as planned at the first press or done at the second.
+// `path` turns a file's path into what the pane shows.
+export type TurnRevertSummary = {
+  turn: string
+  reverted: string[]
+  // Each skipped file with why: a refusal's own words, or that it is kept.
+  skipped: Array<{ path: string; why: RevertOutcome | 'kept' }>
+  stopped: string | null
+  notTried: number
+}
+
+export function revertAllNotice(s: TurnRevertSummary, turnName: (turnId: string) => string): string {
+  const parts: string[] = []
+  const files = (n: number) => `${n} ${n === 1 ? 'file' : 'files'}`
+  parts.push(s.reverted.length > 0 ? `Reverted ${files(s.reverted.length)} of ${s.turn}.` : `Nothing in ${s.turn} was reverted.`)
+  if (s.stopped !== null) {
+    parts.push(`Stopped at ${s.stopped}: the write could not be confirmed, so ${files(s.notTried)} more ${s.notTried === 1 ? 'was' : 'were'} left alone. Check that file before going on.`)
+  }
+  if (s.skipped.length > 0) parts.push(`Skipped ${files(s.skipped.length)}: ${skippedWords(s.skipped, turnName)}`)
+  return parts.join(' ')
+}
+
+// The first press: what the second will do, before anything is written.
+export function revertAllPlanNotice(s: Pick<TurnRevertSummary, 'turn' | 'skipped'> & { writes: number }, turnName: (turnId: string) => string): string {
+  if (s.writes === 0) return `Nothing in ${s.turn} can be reverted. ${skippedWords(s.skipped, turnName)}`
+  return s.skipped.length === 0 ? '' : `Revert all skips ${s.skipped.length} of ${s.turn}'s files: ${skippedWords(s.skipped, turnName)}`
+}
+
+function skippedWords(skipped: TurnRevertSummary['skipped'], turnName: (turnId: string) => string): string {
+  return skipped.map(({ path, why }) => (why === 'kept' ? `${path} is kept.` : revertNotice(why, path, turnName))).join(' ')
+}

@@ -5,10 +5,10 @@ import { createHash } from 'node:crypto'
 import { fakeHost, base64FromBytes, bytesFromBase64, type Run, type RunResult } from './fake-host.ts'
 import { capture, keyOf, loadBase64, loadText, storeDirOf } from '../../plugins/changes/hooks/io/blobs.ts'
 import { blobAt, blobsAt, cleanBlobOf, hashObject, hashObjects, headOf, repoRootOf, restoreFrom, runGit, statusOf } from '../../plugins/changes/hooks/io/git.ts'
-import { revertFile, runRestore } from '../../plugins/changes/hooks/io/restore.ts'
+import { planTurn, revertFile, revertTurn, runRestore } from '../../plugins/changes/hooks/io/restore.ts'
 import { platformOf } from '../../plugins/changes/hooks/io/ports.ts'
-import { emptyIndex } from '../../plugins/changes/hooks/core/model.ts'
-import { addEdit, openTurn } from '../../plugins/changes/hooks/core/timeline.ts'
+import { emptyIndex, type Index } from '../../plugins/changes/hooks/core/model.ts'
+import { addEdit, openTurn, recordRevert, statusOf as fileStatus } from '../../plugins/changes/hooks/core/timeline.ts'
 
 const STORE = 'C:/Users/me/.claude/plugin-data/notary-changes/s1'
 const sha = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex')
@@ -164,7 +164,8 @@ test('platformOf reads the OS variable', () => {
 
 // A host whose process runs act on its files the way the real commands do:
 // PowerShell's WriteAllBytes and Replace/Move, sh's decode-then-mv, mv, rm.
-function actingHost(env: Record<string, string> = {}) {
+// `fails`: while it answers true, every command fails (a full or locked disk).
+function actingHost(env: Record<string, string> = {}, fails: () => boolean = () => false) {
   let host: ReturnType<typeof fakeHost>
   const move = (from: string, to: string) => {
     const bytes = host.files.get(from)
@@ -176,6 +177,7 @@ function actingHost(env: Record<string, string> = {}) {
   host = fakeHost({
     env,
     onRun: ({ argv, init }: Run) => {
+      if (fails()) return { exitCode: 1, stdout: '' }
       const tmp = init?.env?.NOTARY_TMP
       const target = init?.env?.NOTARY_TARGET
       const script = argv.join(' ')
@@ -321,9 +323,9 @@ test('review 2 #5: a path that no longer lands on the planned file is left alone
   const { index } = await editedIndex(host, 'C:/p/a.ts', 'old\n', 'new\n')
   const result = await revertFile(host as any, WIN, index, { turnId: 't1', key: 'c:/p/a.ts' }, 'turn', 'C:/p/a.ts')
   assert.equal(result.ok, true)
-  const moved = await editedIndex(actingHost(), 'C:/q/b.ts', 'old\n', 'new\n')
+  // Its saved copies are on this disk too: only the path's target moved.
   const elsewhere = actingHost()
-  elsewhere.put('C:/q/b.ts', 'new\n')
+  const moved = await editedIndex(elsewhere, 'C:/q/b.ts', 'old\n', 'new\n')
   ;(elsewhere.fs as any).stat = async (path: string, opts?: { resolve?: boolean }) => ({ kind: 'file', size: 4, mtimeMs: 1, isLink: true, ...(opts?.resolve ? { realPath: 'D:/other/b.ts' } : {}) })
   const refused = await revertFile(elsewhere as any, WIN, moved.index, { turnId: 't1', key: moved.key }, 'turn', 'C:/q/b.ts')
   assert.deepEqual(refused, { ok: false, reason: 'changed-externally' })
@@ -351,7 +353,137 @@ test('revertFile reports io when the restore did not land', async () => {
   const host = fakeHost({ onRun: () => ({ exitCode: 1, stdout: '' }) })
   const { index, key } = await editedIndex(host, 'C:/p/new.ts', null, 'hello\n')
   const result = await revertFile(host as any, WIN, index, { turnId: 't1', key }, 'turn', 'C:/p/new.ts')
-  assert.deepEqual(result, { ok: false, reason: 'io' })
+  // Marked: the restore ran, so a whole-turn revert stops here.
+  assert.deepEqual(result, { ok: false, reason: 'io', afterWrite: true })
+})
+
+// ── revertTurn: a whole turn, file by file ──
+
+// One turn that edited each file from its before (null: created) to its after.
+async function turnIndex(host: ReturnType<typeof fakeHost>, files: Array<{ path: string; before: string | null; after: string; agentId?: string }>) {
+  let index = openTurn(emptyIndex(), { turnId: 't1', prompt: '', at: 1 })
+  const keyed: Array<{ turnId: string; key: string; path: string }> = []
+  for (const [i, f] of files.entries()) {
+    if (f.before !== null) host.put(f.path, f.before)
+    const pre = await capture(host as any, STORE, f.path)
+    host.put(f.path, f.after)
+    const post = await capture(host as any, STORE, f.path)
+    const key = await keyOf(host as any, f.path, 'windows')
+    index = addEdit(index, { toolUseId: `tu${i}`, tool: 'Edit', via: 'tool', path: f.path, key, before: pre, after: post, startedAt: 1, at: 2, ...(f.agentId ? { agentId: f.agentId } : {}) })
+    keyed.push({ turnId: 't1', key, path: f.path })
+  }
+  return { index, files: keyed }
+}
+
+// The index as the pane saves it after each landed revert.
+function recorder(start: Index) {
+  let index = start
+  const recorded: string[] = []
+  const record = async (file: { key: string; path: string }, outcome: { before: any; after: any; refs: any[] }) => {
+    index = recordRevert(index, { key: file.key, path: file.path, before: outcome.before, after: outcome.after, refs: outcome.refs, at: 9 })
+    recorded.push(file.path)
+    return index
+  }
+  return { record, recorded, index: () => index }
+}
+
+test('revertTurn writes every revertible file and records each one', async () => {
+  const host = actingHost()
+  const { index, files } = await turnIndex(host, [
+    { path: 'C:/p/a.ts', before: 'a1\n', after: 'a2\n' },
+    { path: 'C:/p/b.ts', before: 'b1\n', after: 'b2\n' },
+  ])
+  const r = recorder(index)
+  const result = await revertTurn(host as any, WIN, index, files, r.record)
+  assert.deepEqual(result.reverted.map(x => x.file.path), ['C:/p/a.ts', 'C:/p/b.ts'])
+  assert.deepEqual(r.recorded, ['C:/p/a.ts', 'C:/p/b.ts'])
+  assert.equal(host.text('C:/p/a.ts'), 'a1\n')
+  assert.equal(host.text('C:/p/b.ts'), 'b1\n')
+  assert.equal(result.stopped, null)
+  for (const f of files) assert.equal(fileStatus(r.index(), 't1', f.key), 'reverted')
+})
+
+test('revertTurn skips a file changed outside Claude and still writes the rest', async () => {
+  const host = actingHost()
+  const { index, files } = await turnIndex(host, [
+    { path: 'C:/p/a.ts', before: 'a1\n', after: 'a2\n' },
+    { path: 'C:/p/b.ts', before: 'b1\n', after: 'b2\n' },
+  ])
+  host.put('C:/p/a.ts', 'edited by hand\n')
+  const r = recorder(index)
+  const result = await revertTurn(host as any, WIN, index, files, r.record)
+  assert.deepEqual(result.skipped.map(x => [x.file.path, x.outcome.reason]), [['C:/p/a.ts', 'changed-externally']])
+  assert.deepEqual(result.reverted.map(x => x.file.path), ['C:/p/b.ts'])
+  assert.equal(host.text('C:/p/a.ts'), 'edited by hand\n')
+  assert.equal(host.text('C:/p/b.ts'), 'b1\n')
+})
+
+test('revertTurn deletes a file the turn created, and reverts a subagent\'s edit with the turn', async () => {
+  const host = actingHost()
+  const { index, files } = await turnIndex(host, [
+    { path: 'C:/p/new.ts', before: null, after: 'hello\n' },
+    { path: 'C:/p/b.ts', before: 'b1\n', after: 'b2\n', agentId: 'agent-1' },
+  ])
+  const result = await revertTurn(host as any, WIN, index, files, recorder(index).record)
+  assert.equal(result.reverted.length, 2)
+  assert.equal(host.text('C:/p/new.ts'), undefined)
+  assert.equal(host.text('C:/p/b.ts'), 'b1\n')
+})
+
+test('revertTurn stops at a write that did not land and leaves the rest alone', async () => {
+  let failing = false
+  const host = actingHost({}, () => failing)
+  const { index, files } = await turnIndex(host, [
+    { path: 'C:/p/a.ts', before: 'a1\n', after: 'a2\n' },
+    { path: 'C:/p/new.ts', before: null, after: 'x\n' },
+    { path: 'C:/p/c.ts', before: 'c1\n', after: 'c2\n' },
+  ])
+  const r = recorder(index)
+  const record = async (file: any, outcome: any) => {
+    failing = true
+    return r.record(file, outcome)
+  }
+  const result = await revertTurn(host as any, WIN, index, files, record)
+  assert.deepEqual(result.reverted.map(x => x.file.path), ['C:/p/a.ts'])
+  assert.equal(result.stopped?.path, 'C:/p/new.ts')
+  assert.deepEqual(result.notTried.map(f => f.path), ['C:/p/c.ts'])
+  assert.equal(host.text('C:/p/c.ts'), 'c2\n')
+  assert.deepEqual(r.recorded, ['C:/p/a.ts'])
+})
+
+test('revertTurn restores a large file from git', async () => {
+  let hashed = 'other'
+  const host = fakeHost({
+    onRun: ({ argv }) => {
+      const sub = argv.slice(5).join(' ')
+      if (sub.startsWith('restore')) {
+        hashed = 'o1'
+        return { exitCode: 0, stdout: '' }
+      }
+      if (sub.startsWith('hash-object')) return { exitCode: 0, stdout: hashed + '\n' }
+      return { exitCode: 1, stdout: '' }
+    },
+  })
+  host.put('C:/repo/big.bin', 'after\n')
+  const post = await capture(host as any, STORE, 'C:/repo/big.bin')
+  const key = 'c:/repo/big.bin'
+  let index = openTurn(emptyIndex(), { turnId: 't1', prompt: '', at: 1 })
+  index = addEdit(index, { toolUseId: 'tu', tool: 'Write', via: 'tool', path: 'C:/repo/big.bin', key, before: { git: { oid: 'o1', commit: 'c1' } }, after: post, startedAt: 1, at: 2 })
+  const ctx = { platform: 'windows' as const, store: STORE, root: 'C:/repo' }
+  const result = await revertTurn(host as any, ctx, index, [{ turnId: 't1', key, path: 'C:/repo/big.bin', rel: 'big.bin' }], recorder(index).record)
+  assert.deepEqual(result.reverted.map(x => x.outcome.after), [{ git: { oid: 'o1', commit: 'c1' } }])
+})
+
+test('planTurn writes nothing and says what each file would do', async () => {
+  const host = actingHost()
+  const { index, files } = await turnIndex(host, [
+    { path: 'C:/p/a.ts', before: 'a1\n', after: 'a2\n' },
+    { path: 'C:/p/b.ts', before: 'b1\n', after: 'b2\n' },
+  ])
+  host.put('C:/p/b.ts', 'edited by hand\n')
+  const plans = await planTurn(host as any, WIN, index, files)
+  assert.deepEqual(plans.map(p => (p.plan.ok ? 'ok' : p.plan.reason)), ['ok', 'changed-externally'])
+  assert.equal(host.text('C:/p/a.ts'), 'a2\n')
 })
 
 test('revertFile verifies a git restore with hash-object', async () => {
