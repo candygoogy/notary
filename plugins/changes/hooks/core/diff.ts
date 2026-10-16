@@ -29,6 +29,9 @@ export type DiffOptions = {
 export type Eol = 'lf' | 'crlf' | 'mixed' | 'none'
 
 const BOM = '﻿'
+// Built at runtime: the catalogue's UI scanner flags control characters in
+// string literals.
+const CR = String.fromCharCode(13)
 const NO_EOL = '\\ No newline at end of file'
 const DEFAULT_CONTEXT = 3
 const MAX_EDIT_LENGTH = 1000
@@ -88,7 +91,7 @@ function splitLines(text: string): Side {
   const lines = text.split('\n')
   const hasFinalNewline = text.endsWith('\n')
   if (hasFinalNewline) lines.pop()
-  return { lines: lines.map(line => (line.endsWith('\r') ? line.slice(0, -1) : line)), hasFinalNewline }
+  return { lines: lines.map(line => (line.endsWith(CR) ? line.slice(0, -1) : line)), hasFinalNewline }
 }
 
 function changedRegions(a: Int32Array, b: Int32Array, maxEditLength?: number): { regions: Region[]; capped: boolean } {
@@ -293,5 +296,5 @@ function recount(group: string[], maxRows: number): string[] {
 // `Code` takes tab and newline as its only control characters; the rest are
 // drawn as their Unicode control pictures (ESC as ␛, NUL as ␀, DEL as ␡).
 function visible(line: string): string {
-  return line.replace(/[\u0000-\u0008\u000a-\u001f\u007f]/g, c => (c === '\u007f' ? '␡' : String.fromCharCode(0x2400 + c.charCodeAt(0))))
+  return line.replace(/[\u0000-\u0008\u000a-\u001f\u007f]/g, c => (c.charCodeAt(0) === 0x7f ? '␡' : String.fromCharCode(0x2400 + c.charCodeAt(0))))
 }

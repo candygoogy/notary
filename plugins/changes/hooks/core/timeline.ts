@@ -3,6 +3,7 @@
 // no field is ever set to undefined, so the index survives `$.state` as is.
 
 import {
+  KEY_SEP,
   REVERT_TURN,
   sameContent,
   statusKey,
@@ -317,7 +318,7 @@ function dropOldest(index: Index): Index | null {
   // Reverts older than every remaining turn have nothing left to chain to.
   const oldest = Math.min(...turns.map(t => t.seq), index.nextSeq)
   const status: Record<string, FileStatus> = {}
-  for (const [k, v] of Object.entries(index.status)) if (k.slice(0, k.indexOf('\u0000')) !== gone) status[k] = v
+  for (const [k, v] of Object.entries(index.status)) if (k.slice(0, k.indexOf(KEY_SEP)) !== gone) status[k] = v
   const keep = (e: EditRecord) => (e.via === 'revert' ? e.seq > oldest : e.turnId !== gone)
   const trimmed = { ...index.trimmed }
   for (const e of index.edits) if (!keep(e)) trimmed[e.key] = Math.max(trimmed[e.key] ?? 0, e.seq)

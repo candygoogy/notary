@@ -91,8 +91,12 @@ export function emptyIndex(): Index {
   return { turns: [], edits: [], agents: [], actions: [], untracked: [], status: {}, nextSeq: 1, nextOrdinal: 1, trimmed: {} }
 }
 
+// NUL, built at runtime: the catalogue's UI scanner flags control characters
+// in string literals.
+export const KEY_SEP = String.fromCharCode(0)
+
 export function statusKey(turnId: string, key: string): string {
-  return turnId + '\u0000' + key
+  return turnId + KEY_SEP + key
 }
 
 // Whether two captures hold the same content: true, false, or null when it

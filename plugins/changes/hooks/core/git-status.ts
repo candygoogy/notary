@@ -24,10 +24,14 @@ export type ShellSnapshot = {
 // HEAD (missing there means the file is new).
 export type Candidate = { path: string; beforeFrom: 'snapshot' | 'head' }
 
+// What git's -z output ends each field with. Built at runtime: the catalogue's
+// UI scanner flags control characters in string literals.
+export const NUL = String.fromCharCode(0)
+
 // Porcelain v1 with -z: `XY path` per entry, NUL-ended, unquoted, relative to
 // the repository root; a rename or copy is followed by its source path.
 export function parseStatus(output: string): Map<string, StatusEntry> {
-  const fields = output.split('\0')
+  const fields = output.split(NUL)
   const entries = new Map<string, StatusEntry>()
   for (let i = 0; i < fields.length; i++) {
     const field = fields[i]

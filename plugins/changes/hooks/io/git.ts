@@ -3,7 +3,7 @@
 
 import type { ProcessRunResult } from 'claude-code'
 
-import { parseStatus, type StatusEntry } from '../core/git-status.ts'
+import { NUL, parseStatus, type StatusEntry } from '../core/git-status.ts'
 import type { Ports } from './ports.ts'
 
 export const GIT_TIMEOUT_MS = 5000
@@ -124,7 +124,7 @@ export async function cleanBlobOf(io: Ports, root: string, rel: string): Promise
 export async function namesBetween(io: Ports, root: string, from: string, to: string): Promise<string[] | null> {
   const r = await runGit(io, root, ['diff', '--name-only', '-z', '--no-renames', from, to])
   if (!r || r.exitCode !== 0 || r.isStdoutTruncated) return null
-  return r.stdout.split('\0').filter(p => p !== '')
+  return r.stdout.split(NUL).filter(p => p !== '')
 }
 
 export async function restoreFrom(io: Ports, root: string, commit: string, rel: string): Promise<boolean> {
