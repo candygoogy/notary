@@ -1,6 +1,6 @@
 {
   "name": "changes",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "See what Claude changed, turn by turn. Keep it or send it back. A per-turn timeline with each file's diff and keep/revert.",
   "author": { "name": "Notary contributors" },
   "license": "MIT",

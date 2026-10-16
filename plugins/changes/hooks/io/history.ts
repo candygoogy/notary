@@ -9,7 +9,7 @@
 import type { Index } from '../core/model.ts'
 import { MAX_READ_BYTES } from './blobs.ts'
 import type { Platform, Ports } from './ports.ts'
-import { moveInto, TMP_SUFFIX } from './restore.ts'
+import { cleanUp, moveInto, tmpFor } from './restore.ts'
 
 export const HISTORY_FORMAT = 1
 // A lease not renewed for this long belongs to a process that is gone (a
@@ -22,17 +22,22 @@ const leaseFile = (store: string) => `${store}/lease.json`
 
 export type Loaded = { index: Index } | { unreadable: 'corrupt' | 'format' | 'other-session' } | null
 
-// Writes the history as one file in one rename: the text goes to a temp file,
-// which then replaces index.json, so a crash leaves the old file or the new,
-// never half of one. Refused (false) when it would be too large to read back.
+// Writes the history as one file in one rename: the text goes to a temp file
+// of its own (tmpFor), which then replaces index.json, so a crash leaves the
+// old file or the new, never half of one. Refused (false) when it would be too
+// large to read back.
 export async function saveHistory(io: Ports, platform: Platform, store: string, sessionId: string, index: Index, now: number): Promise<boolean> {
   const text = JSON.stringify({ format: HISTORY_FORMAT, sessionId, savedAt: now, index })
   if (new TextEncoder().encode(text).length > MAX_READ_BYTES) return false
-  const tmp = `${historyFile(store)}${TMP_SUFFIX}`
+  // A temp file of this save's own; only it is removed when the save fails.
+  let tmp: string | null = null
   try {
+    tmp = await tmpFor(io, historyFile(store))
+    if (tmp === null) return false
     await io.fs.write(tmp, text)
-    return await moveInto(io, platform, tmp, historyFile(store))
+    return (await moveInto(io, platform, tmp, historyFile(store))) || (await cleanUp(io, platform, tmp))
   } catch {
+    if (tmp !== null) await cleanUp(io, platform, tmp)
     return false
   }
 }

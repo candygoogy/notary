@@ -3,9 +3,10 @@
 // no delete or rename, so bytes, renames and deletes go through a host
 // command, paths in env.
 //
-// A write never truncates the file in place: the content goes to
-// `<path>.notary-tmp`, checked against its blob's hash first, then a rename
-// replaces the file (File.Replace or Move on Windows, rename(2) on POSIX).
+// A write never truncates the file in place: the content goes to a temp file
+// of its own, `<path>.notary-tmp-<random id>`, checked against its blob's hash
+// first, then a rename replaces the file (File.Replace or Move on Windows,
+// rename(2) on POSIX).
 
 import { bytesFromBase64 } from '../core/content.ts'
 import { sameContent, type Content, type Index } from '../core/model.ts'
@@ -31,7 +32,9 @@ export type RevertOutcome =
   // verified); without it, nothing was written.
   | { ok: false; reason: 'io'; afterWrite?: true }
 
+// Starts every temp file's suffix, so a stray one is recognisable.
 export const TMP_SUFFIX = '.notary-tmp'
+const TMP_TRIES = 3
 const COMMAND_TIMEOUT_MS = 20_000
 
 const WINDOWS_MOVE =
@@ -43,7 +46,8 @@ const POSIX_WRITE_BYTES = `(${POSIX_DECODE}) > "$NOTARY_TMP" && mv -f -- "$NOTAR
 
 // `rel` is the path relative to the repository root, for a git restore.
 export async function runRestore(io: Ports, ctx: RestoreContext, path: string, rel: string | undefined, restore: Restore): Promise<boolean> {
-  const tmp = path + TMP_SUFFIX
+  // Set only once this run has its own temp path: nothing else is cleaned up.
+  let tmp: string | null = null
   try {
     switch (restore.kind) {
       case 'none':
@@ -51,12 +55,16 @@ export async function runRestore(io: Ports, ctx: RestoreContext, path: string, r
       case 'write-text': {
         const text = await loadText(io, ctx.store, restore.hash)
         if (text === null || (await sha256Hex(new TextEncoder().encode(text))) !== restore.hash) return false
+        tmp = await tmpFor(io, path)
+        if (tmp === null) return false
         await io.fs.write(tmp, text)
         return (await moveInto(io, ctx.platform, tmp, path)) || (await cleanUp(io, ctx.platform, tmp))
       }
       case 'write-bytes': {
         const base64 = await loadBase64(io, ctx.store, restore.hash)
         if (base64 === null || (await sha256Hex(bytesFromBase64(base64))) !== restore.hash) return false
+        tmp = await tmpFor(io, path)
+        if (tmp === null) return false
         // Makes the folders the path needs; the command fills the file in.
         await io.fs.write(tmp, '')
         const argv = ctx.platform === 'windows' ? powershell(WINDOWS_WRITE_BYTES) : ['sh', '-c', POSIX_WRITE_BYTES]
@@ -69,9 +77,21 @@ export async function runRestore(io: Ports, ctx: RestoreContext, path: string, r
         return await restoreFrom(io, ctx.root, restore.commit, rel)
     }
   } catch {
-    await cleanUp(io, ctx.platform, tmp)
+    if (tmp !== null) await cleanUp(io, ctx.platform, tmp)
     return false
   }
+}
+
+// A temp path beside `path` for one write, `<path>.notary-tmp-<random id>`.
+// `$.fs` cannot create a file exclusively, so a name already taken is never
+// used: another file there is not written over, moved or removed. Null when
+// no free name is found.
+export async function tmpFor(io: Ports, path: string): Promise<string | null> {
+  for (let i = 0; i < TMP_TRIES; i++) {
+    const tmp = `${path}${TMP_SUFFIX}-${crypto.randomUUID()}`
+    if (!(await io.fs.exists(tmp))) return tmp
+  }
+  return null
 }
 
 // Whether the file on disk now is `target`.
@@ -200,12 +220,13 @@ async function remove(io: Ports, platform: Platform, path: string): Promise<bool
   return succeeds(io, argv, { NOTARY_TARGET: path })
 }
 
-// Removes a leftover temp file; always answers false, the restore having failed.
-async function cleanUp(io: Ports, platform: Platform, tmp: string): Promise<false> {
+// Removes the temp file a failed write left; always answers false. Only ever
+// given a path from tmpFor, so it removes nothing this write did not create.
+export async function cleanUp(io: Ports, platform: Platform, tmp: string): Promise<false> {
   try {
     if (await io.fs.exists(tmp)) await remove(io, platform, tmp)
   } catch {
-    // Best effort: a stray .notary-tmp is harmless.
+    // Best effort: a stray .notary-tmp-<id> is ours and in no one's way.
   }
   return false
 }

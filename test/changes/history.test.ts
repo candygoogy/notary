@@ -61,8 +61,9 @@ test('saveHistory writes a temp file and renames it into place, and loadHistory 
   const { index } = await edited(host, 'C:/p/a.ts', 'old\n', 'new\n')
   assert.equal(await saveHistory(host as any, 'windows', STORE, 's1', index, 5), true)
   assert.ok(!host.written.includes(`${STORE}/index.json`), 'never written in place')
-  assert.ok(host.written.includes(`${STORE}/index.json.notary-tmp`))
-  assert.equal(host.text(`${STORE}/index.json.notary-tmp`), undefined)
+  const tmps = host.written.filter(p => p.startsWith(`${STORE}/index.json.notary-tmp-`))
+  assert.equal(tmps.length, 1)
+  assert.equal(host.text(tmps[0]), undefined)
   assert.deepEqual(await loadHistory(host as any, STORE, 's1'), { index })
 })
 
@@ -75,6 +76,7 @@ test('a rename that fails leaves the saved history as it was', async () => {
   const later = openTurn(first.index, { turnId: 't2', prompt: 'more', at: 9 })
   assert.equal(await saveHistory(host as any, 'windows', STORE, 's1', later, 9), false)
   assert.equal(host.text(`${STORE}/index.json`), before)
+  assert.deepEqual([...host.files.keys()].filter(p => p.includes('.notary-tmp')), [])
 })
 
 test('no saved history is null; one that is corrupt, of another format or conversation, or misshapen is refused whole', async () => {

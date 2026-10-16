@@ -202,6 +202,9 @@ function actingHost(env: Record<string, string> = {}, fails: () => boolean = () 
 }
 
 const shaOf = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex')
+// The temp files a restore of `path` would use, left on the host.
+const tmpsOf = (host: ReturnType<typeof fakeHost>, path: string) => [...host.files.keys()].filter(k => k.startsWith(`${path}.notary-tmp-`))
+const TMP_OF = (path: string) => new RegExp(`^${path.replace(/[.]/g, '\\.')}\\.notary-tmp-[0-9a-f-]{36}$`)
 
 test('write-text writes the stored text through a temp file and a rename', async () => {
   const host = actingHost()
@@ -211,8 +214,9 @@ test('write-text writes the stored text through a temp file and a rename', async
   host.put('C:/p/a.ts', 'new')
   assert.equal(await runRestore(host as any, { platform: 'windows', store: STORE }, 'C:/p/a.ts', undefined, { kind: 'write-text', hash }), true)
   assert.equal(host.text('C:/p/a.ts'), text)
-  assert.equal(host.files.has('C:/p/a.ts.notary-tmp'), false)
+  assert.deepEqual(tmpsOf(host, 'C:/p/a.ts'), [])
   assert.ok(host.runs[0].argv[4].includes('[IO.File]::Replace'))
+  assert.match(host.runs[0].init?.env?.NOTARY_TMP ?? '', TMP_OF('C:/p/a.ts'))
 })
 
 test('review 2 #5: a blob whose content does not match its hash is never written', async () => {
@@ -231,10 +235,12 @@ test('write-bytes on Windows writes the temp file and replaces the target in one
   assert.equal(await runRestore(host as any, { platform: 'windows', store: STORE }, 'C:/p/x.bin', undefined, { kind: 'write-bytes', hash: shaOf(bytes) }), true)
   const run = host.runs[0]
   assert.equal(run.argv[0], 'powershell')
-  assert.deepEqual(run.init?.env, { NOTARY_TMP: 'C:/p/x.bin.notary-tmp', NOTARY_TARGET: 'C:/p/x.bin' })
+  assert.deepEqual(Object.keys(run.init?.env ?? {}), ['NOTARY_TMP', 'NOTARY_TARGET'])
+  assert.match(run.init?.env?.NOTARY_TMP ?? '', TMP_OF('C:/p/x.bin'))
+  assert.equal(run.init?.env?.NOTARY_TARGET, 'C:/p/x.bin')
   assert.equal(run.init?.stdin, base64FromBytes(bytes))
   assert.deepEqual(host.files.get('C:/p/x.bin'), bytes)
-  assert.equal(host.files.has('C:/p/x.bin.notary-tmp'), false)
+  assert.deepEqual(tmpsOf(host, 'C:/p/x.bin'), [])
 })
 
 test('review 2 #5: write-bytes on POSIX decodes into the temp file before replacing the target', async () => {
@@ -256,7 +262,91 @@ test('review 2 #5: a failed write-bytes leaves neither a temp file nor an empty 
   assert.equal(await runRestore(host as any, { platform: 'windows', store: STORE }, 'C:/p/new.bin', undefined, { kind: 'write-bytes', hash: shaOf(bytes) }), false)
   assert.equal(host.files.has('C:/p/new.bin'), false)
   const cleanup = host.runs.find(r => r.argv.join(' ').includes('Remove-Item'))
-  assert.equal(cleanup?.init?.env?.NOTARY_TARGET, 'C:/p/new.bin.notary-tmp')
+  assert.match(cleanup?.init?.env?.NOTARY_TARGET ?? '', TMP_OF('C:/p/new.bin'))
+  assert.equal(cleanup?.init?.env?.NOTARY_TARGET, host.runs[0].init?.env?.NOTARY_TMP)
+})
+
+test('a file already named like a temp file is never written over or removed', async t => {
+  const text = 'old\n'
+  const hash = shaOf(text)
+  const setUp = (host: ReturnType<typeof fakeHost>) => {
+    host.put(`${STORE}/blobs/${hash}.txt`, text)
+    host.put('C:/p/a.ts', 'new')
+    host.put('C:/p/a.ts.notary-tmp', 'mine')
+    host.put('C:/p/a.ts.notary-tmp-taken', 'mine too')
+  }
+  const untouched = (host: ReturnType<typeof fakeHost>) => {
+    assert.equal(host.text('C:/p/a.ts.notary-tmp'), 'mine')
+    assert.equal(host.text('C:/p/a.ts.notary-tmp-taken'), 'mine too')
+  }
+  // The random names handed out in turn, the last one again and again. The
+  // first is one already on disk: it is passed by.
+  let names: string[] = []
+  t.mock.method(crypto, 'randomUUID', () => (names.length > 1 ? names.shift() : names[0]))
+  const ids = (...list: string[]) => (names = list)
+  const ctx = { platform: 'windows' as const, store: STORE }
+
+  ids('taken', 'ours')
+  const ok = actingHost()
+  setUp(ok)
+  assert.equal(await runRestore(ok as any, ctx, 'C:/p/a.ts', undefined, { kind: 'write-text', hash }), true)
+  assert.equal(ok.text('C:/p/a.ts'), text)
+  assert.equal(ok.runs[0].init?.env?.NOTARY_TMP, 'C:/p/a.ts.notary-tmp-ours')
+  untouched(ok)
+
+  // The rename fails: only this revert's own temp file is removed.
+  ids('taken', 'ours')
+  const failed = fakeHost({ onRun: ({ argv, init }) => (argv.join(' ').includes('Remove-Item') ? (failed.files.delete(init!.env!.NOTARY_TARGET!), { exitCode: 0, stdout: '' }) : { exitCode: 1, stdout: '' }) })
+  setUp(failed)
+  assert.equal(await runRestore(failed as any, ctx, 'C:/p/a.ts', undefined, { kind: 'write-text', hash }), false)
+  assert.equal(failed.text('C:/p/a.ts'), 'new')
+  assert.deepEqual(failed.runs.filter(r => r.argv.join(' ').includes('Remove-Item')).map(r => r.init?.env?.NOTARY_TARGET), ['C:/p/a.ts.notary-tmp-ours'])
+  assert.equal(failed.files.has('C:/p/a.ts.notary-tmp-ours'), false)
+  untouched(failed)
+
+  // No free name: refused before anything is written.
+  ids('taken')
+  const full = actingHost()
+  setUp(full)
+  assert.equal(await runRestore(full as any, ctx, 'C:/p/a.ts', undefined, { kind: 'write-text', hash }), false)
+  assert.equal(full.runs.length, 0)
+  assert.equal(full.text('C:/p/a.ts'), 'new')
+  untouched(full)
+})
+
+test('two restores of one file at once use their own temp files, and neither removes the other', async () => {
+  const [a, b] = ['from a\n', 'from b\n']
+  // The rename of a's temp file fails; b's goes through.
+  let aTmp: string | undefined
+  const host = actingHost({}, () => {
+    const run = host.runs[host.runs.length - 1]
+    if (!run.argv.join(' ').includes('[IO.File]::Replace') || host.text(run.init!.env!.NOTARY_TMP!) !== a) return false
+    aTmp = run.init!.env!.NOTARY_TMP
+    return true
+  })
+  for (const text of [a, b]) host.put(`${STORE}/blobs/${shaOf(text)}.txt`, text)
+  host.put('C:/p/a.ts', 'new')
+  // No command runs until both temp files are written.
+  const run = host.process.run
+  let release!: () => void
+  const bothWritten = new Promise<void>(resolve => (release = resolve))
+  let calls = 0
+  host.process.run = async (argv, init) => {
+    if (++calls === 2) release()
+    await bothWritten
+    return run(argv, init)
+  }
+  const ctx = { platform: 'windows' as const, store: STORE }
+  const results = await Promise.all([a, b].map(text => runRestore(host as any, ctx, 'C:/p/a.ts', undefined, { kind: 'write-text', hash: shaOf(text) })))
+  assert.deepEqual(results, [false, true])
+  assert.equal(host.text('C:/p/a.ts'), b)
+  const moves = host.runs.filter(r => r.argv.join(' ').includes('[IO.File]::Replace')).map(r => r.init?.env?.NOTARY_TMP)
+  assert.equal(moves.length, 2)
+  assert.notEqual(moves[0], moves[1])
+  for (const tmp of moves) assert.match(tmp ?? '', TMP_OF('C:/p/a.ts'))
+  const removed = host.runs.filter(r => r.argv.join(' ').includes('Remove-Item')).map(r => r.init?.env?.NOTARY_TARGET)
+  assert.deepEqual(removed, [aTmp])
+  assert.deepEqual(tmpsOf(host, 'C:/p/a.ts'), [])
 })
 
 test('delete uses PowerShell on Windows and rm on POSIX', async () => {
