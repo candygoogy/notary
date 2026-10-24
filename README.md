@@ -186,7 +186,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and tests.
 ## License
 
 [MIT](LICENSE)
-
-## Star history
-
-[![Star history](https://api.star-history.com/svg?repos=candygoogy/notary&type=Date)](https://star-history.com/#candygoogy/notary&Date)
