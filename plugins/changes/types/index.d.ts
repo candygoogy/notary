@@ -91,6 +91,7 @@ declare module 'claude-code' {
       storeFull: boolean
       autoOpened: boolean
       shellOff: boolean
+      shellUnseen: boolean
       // A line for the pane about the kept history: unreadable, or read-only here.
       historyNote: string | null
       inactive: boolean

@@ -111,7 +111,7 @@ Claude Code's built-in `/diff` shows the working tree's git diff. Changes is per
 
 - **History is kept for `keepHistoryDays`.** A new session and `/clear` start an empty pane. A resumed conversation brings its earlier turns back (see Resumed conversations). After `keepHistoryDays` (7 by default), or sooner if all kept conversations pass 1 GB, a conversation's history is deleted and its turns can't be reverted from the pane. Your files are untouched.
 - **Per file, not per change.** Revert puts the whole file back to before the turn. You can't keep one hunk and revert another.
-- **Shell changes only in git.** Outside a git repository, and in gitignored files, changes made by shell commands aren't seen.
+- **Shell changes only in git.** Outside a git repository, and in gitignored files, changes made by shell commands aren't seen. Outside git, once Claude runs a shell command, the pane says so, and that `git init` (then a new session) makes them tracked.
   - A rename shows as a delete plus a new file.
   - A large file (over 1 MB) rewritten with the same size and timestamp can be missed.
   - Tracking a command never adds more than about 2 seconds to it. A command that changes more than 200 files, a checkout, reset, pull or commit, or a repository with more than 200 uncommitted files is shown as *not tracked*, with the reason, instead of being slowed down.

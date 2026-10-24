@@ -58,6 +58,7 @@ const INACTIVE = { plugin: 'changes', key: 'inactive' } as const
 const STORE_FULL = { plugin: 'changes', key: 'storeFull' } as const
 const AUTO_OPENED = { plugin: 'changes', key: 'autoOpened' } as const
 const SHELL_OFF = { plugin: 'changes', key: 'shellOff' } as const
+const SHELL_UNSEEN = { plugin: 'changes', key: 'shellUnseen' } as const
 const HISTORY_NOTE = { plugin: 'changes', key: 'historyNote' } as const
 
 const PANE = { id: 'changes', title: 'Changes' } as const
@@ -102,6 +103,8 @@ let indexSize = -1
 let savesSinceMeasure = 0
 const FULL_MEASURE_EVERY = 100
 const SHELL_OFF_NOTE = "git is slow here; shell changes aren't tracked this session"
+const SHELL_UNSEEN_NOTE =
+  "Claude ran shell commands, and this folder isn't a git repository, so Changes can't see what they changed. Edits made with Edit and Write still show. To track shell changes too, run git init here and start a new session."
 // Renews the lease while this process holds it; stopped at the session's end.
 let heartbeat: Timer | null = null
 // keepHistoryDays as this module was registered with (register sets it).
@@ -177,6 +180,7 @@ export const register: Register = (on, options) => {
     if (session === null) return next(e)
     if (EDIT_TOOLS.includes(e.tool)) return recordEditCall($, session, e, next)
     if (SHELL_TOOLS.includes(e.tool) && (await shellTracked($, opts, session))) return recordShellCall($, session, e, next)
+    if (SHELL_TOOLS.includes(e.tool) && opts.trackShell && session.root === null) await noteShellUnseen($)
     const r = await next(e)
     if (AGENT_TOOLS.includes(e.tool)) {
       try {
@@ -428,6 +432,17 @@ async function stopShellTracking($: Engine): Promise<void> {
   if (!off) await $.state.set(SHELL_OFF, true)
 }
 
+// Outside a repository a shell command's writes can't be seen: the pane says
+// so once one runs, rather than look empty.
+async function noteShellUnseen($: Engine): Promise<void> {
+  try {
+    const { value: unseen = false } = await $.state.get(SHELL_UNSEEN)
+    if (!unseen) await $.state.set(SHELL_UNSEEN, true)
+  } catch (error) {
+    debug($, 'tool.call', error)
+  }
+}
+
 // After a hot reload the snapshot budget is measured again before the first
 // capture counts against it.
 async function measureStore($: Engine, session: Session): Promise<void> {
@@ -459,6 +474,7 @@ async function resetHistory($: Engine): Promise<void> {
   await $.state.set(PAUSED, null)
   await $.state.set(STORE_FULL, false)
   await $.state.set(HISTORY_NOTE, null)
+  await $.state.set(SHELL_UNSEEN, false)
   indexSize = -1
   savesSinceMeasure = 0
   sweepToken = null
@@ -820,11 +836,13 @@ async function renderPane($: Engine, opts: Options, e: Render[1], next: Render[2
     $.clock.after(0, () => void fetchDiffs($, session, missing))
   }
   const { value: shellOff = false } = await $.state.get(SHELL_OFF)
+  const { value: shellUnseen = false } = await $.state.get(SHELL_UNSEEN)
   const { value: historyNote = null } = await $.state.get(HISTORY_NOTE)
   const notes = [
     paused,
     storeFull ? 'Snapshots are paused: this session saved 500 MB of copies. New changes are listed but cannot be reverted.' : null,
     shellOff ? `Shell commands: ${SHELL_OFF_NOTE}.` : null,
+    shellUnseen ? SHELL_UNSEEN_NOTE : null,
     historyNote,
   ].filter((n): n is string => n !== null)
   return paneView($.ui.resolve(e), {

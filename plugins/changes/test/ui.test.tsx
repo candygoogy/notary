@@ -232,6 +232,34 @@ test('with room for one row only, Changes draws its own row', { options: { track
   expect(await band.find({ key: 'engine' })).toBeUndefined()
 })
 
+// A shell turn outside a repository (git fails in this world): its writes
+// can't be seen, so the pane says why it may look empty.
+async function shellTurn($: Engine, on: On) {
+  world(on)
+  engineDraws(on)
+  on('tool.call', () => ({ result: {}, text: '' }) as never)
+  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true } as never)
+  await $.turn.start({ text: 'fix a', turnId: 't1' })
+  await $.tool.call({ tool: 'Bash', command: "cat > src/a.ts <<'EOF'" } as never)
+  await $.turn.complete({ answer: 'Done.', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' })
+  return texts(await mountPane($, 'terminal'))
+}
+
+test('outside a git repository, a shell command makes the pane say its changes are not seen', async ($, on) => {
+  const text = await shellTurn($, on)
+  expect(text).toContain("this folder isn't a git repository")
+  expect(text).toContain('No changes yet.')
+})
+
+test('with trackShell off, a shell command outside git adds no note', { options: { trackShell: false } }, async ($, on) => {
+  expect(await shellTurn($, on)).not.toContain('git repository')
+})
+
+test('outside a git repository, a session with no shell command has no note', async ($, on) => {
+  await edited($, on, 'terminal')
+  expect(await texts(await mountPane($, 'terminal'))).not.toContain('git repository')
+})
+
 const STORE = 'C:/Users/me/.claude/plugin-data/notary-changes/s1'
 
 const removals = (w: ReturnType<typeof world>) => w.runs.filter(argv => argv.join(' ').includes('Get-ChildItem')).length

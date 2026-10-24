@@ -12,10 +12,13 @@ Notary is a suite of small mods that check Claude's work for you. **Changes** sh
 
 ## Install
 
-At the prompt of a Claude Code session in a terminal (Claude Code 2.1.287 or later):
+At the prompt of a Claude Code session in a terminal (Claude Code 2.1.287 or later), run one command at a time:
 
 ```
 /plugin install changes --marketplace candygoogy/notary
+```
+
+```
 /plugin install receipts --marketplace candygoogy/notary
 ```
 
@@ -61,7 +64,7 @@ The built-in `/diff` shows the working tree's git diff. Changes works per turn a
 
 - **History is kept for 7 days.** A new session and `/clear` start an empty pane. Resume a conversation within 7 days of last using it (`keepHistoryDays`) and its earlier turns come back. After that its history is deleted (sooner if all kept history passes 1 GB), and those turns can't be reverted from the pane. Your files are untouched.
 - **Per file, not per hunk.** Revert puts the whole file back.
-- **Shell commands only in git.** Files changed by Bash or PowerShell commands are seen only inside a git repository, and not when gitignored.
+- **Shell commands only in git.** Files changed by Bash or PowerShell commands are seen only inside a git repository, and not when gitignored. Outside git, once Claude runs a shell command, the pane says its changes can't be seen. To try Changes in a scratch folder, run `git init` there first: Claude sometimes edits files through the shell, more often with permissions bypassed.
 - **No merging.** If the file changed after Claude's edit, Revert refuses rather than guess.
 
 Settings, the full list of refusals and the remaining limits are in [plugins/changes/README.md](plugins/changes/README.md).
