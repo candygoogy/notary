@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import type { Engine } from 'claude-code/testing'
+import type { Engine, Plugin } from 'claude-code/testing'
 
 import { nudgeText, sendBackText, stampText } from '../hooks/core/copy.ts'
 import type { Verdict } from '../hooks/core/types.ts'
@@ -445,3 +445,50 @@ test('/receipts off where the setting has no row: Receipts stands down for the c
   expect(await answer($, 'All tests pass.')).toBeUndefined()
   expect(w.stamps()).toEqual([])
 })
+
+// Changes, as far as Receipts reads it: a shell command that writes (`sed -i`)
+// lands in its index, under the call's id, as the call returns. `order` puts it
+// above Receipts (its write lands after Receipts recorded the run) or beneath.
+function changes(order: 'prepend' | 'append'): Plugin {
+  return {
+    name: 'changes',
+    tier: order,
+    register(on) {
+      on('tool.call', async ($, e, next) => {
+        const r = await next(e)
+        if (e.tool !== 'Bash' || !e.command.startsWith('sed -i')) return r
+        const { value } = await $.state.get({ plugin: 'changes', key: 'index' })
+        const edits = ((value as { edits?: unknown[] } | undefined)?.edits ?? []) as unknown[]
+        const shell = { seq: edits.length + 1, turnId: 't1', toolUseId: e.tool_use_id, tool: 'Bash', via: 'shell', path: 'C:/work/src/a.ts' }
+        await $.state.set({ plugin: 'changes', key: 'index' }, { edits: [...edits, shell] })
+        return r
+      })
+    },
+  }
+}
+
+const sed = { tool: 'Bash', command: "sed -i 's/a/b/' src/a.ts" } as const
+
+for (const order of ['prepend', 'append'] as const) {
+  test(`Changes ${order === 'prepend' ? 'above' : 'beneath'}: a file a shell command changed after the test run leaves the claim unbacked`, { plugins: [changes(order)] }, async ($, on) => {
+    const w = world(on)
+    await $.turn.start({ text: 'fix it', turnId: 't1' })
+    w.answers.push(passing, landed)
+    await $.tool.call(npmTest)
+    await $.tool.call(sed)
+    // Recorded as Changes' write landed, before any answer.
+    const ledger = w.writes.filter(write => write.key === 'ledger').at(-1)?.value as { entries: Array<{ kind: string; path?: string }> }
+    expect(ledger.entries.filter(entry => entry.kind === 'edit')).toEqual([expect.objectContaining({ path: 'C:/work/src/a.ts' })])
+    expect(await answer($, 'All tests pass.')).toBeUndefined()
+    expect(w.stamps()).toEqual([stampText(unverified)])
+  })
+
+  test(`Changes ${order === 'prepend' ? 'above' : 'beneath'}: a file changed and tested in one command backs the claim`, { plugins: [changes(order)] }, async ($, on) => {
+    const w = world(on)
+    await $.turn.start({ text: 'fix it', turnId: 't1' })
+    w.answers.push(passing)
+    await $.tool.call({ tool: 'Bash', command: `${sed.command} && npm test` })
+    expect(await answer($, 'All tests pass.')).toBeUndefined()
+    expect(w.stamps()).toEqual([expect.stringMatching(/^🧾 ✅ Verified · /)])
+  })
+}

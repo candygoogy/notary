@@ -4,3 +4,4 @@ node_modules/
 .worktrees/
 *.log
 tools/probe/probe-out.log
+.claude/worktrees/

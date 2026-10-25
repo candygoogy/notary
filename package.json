@@ -10,10 +10,12 @@
   "scripts": {
     "sync": "node scripts/sync-shared.mjs",
     "test:unit": "node --test \"test/**/*.test.ts\"",
-    "test:mods": "claude plugin test plugins/receipts && claude plugin test plugins/changes",
-    "validate": "claude plugin validate . && claude plugin validate plugins/receipts && claude plugin validate plugins/changes",
+    "test:mods": "claude plugin test plugins/receipts && claude plugin test plugins/changes && claude plugin test plugins/scope-cop",
+    "validate": "claude plugin validate . && claude plugin validate plugins/receipts && claude plugin validate plugins/changes && claude plugin validate plugins/scope-cop",
     "check": "node scripts/sync-shared.mjs --check && npm run test:unit && npm run validate",
     "replay": "node tools/replay/replay.ts",
+    "replay:scope": "node tools/replay-scope/replay-scope.ts",
+    "eval:scope": "node tools/scope-eval/run.ts",
     "smoke": "node tools/smoke/smoke.mjs"
   },
   "devDependencies": {

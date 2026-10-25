@@ -13,9 +13,11 @@ export type RunInput = { tool: 'Bash' | 'PowerShell'; command: string; isError: 
 // `subset`: a failing run that ran only part of its suite (a name filter, "N filtered out").
 export type Evidence = { strength: Strength; outcome: Outcome; command: string; summary: string; subset?: true }
 
+// A run's `toolUseId` is its tool call's: a file that same shell command changed
+// was changed before the run (recordShellEdit).
 export type LedgerEntry =
   | { seq: number; at: number; agentId?: string; kind: 'edit'; path: string }
-  | { seq: number; at: number; agentId?: string; kind: 'run'; evidence: Evidence }
+  | { seq: number; at: number; agentId?: string; toolUseId?: string; kind: 'run'; evidence: Evidence }
 export type Ledger = { nextSeq: number; entries: LedgerEntry[] }
 
 export type VerdictKind = 'verified' | 'unverified' | 'contradicted'

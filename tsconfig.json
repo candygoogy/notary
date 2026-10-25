@@ -14,5 +14,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["test/receipts/**/*.ts", "test/shared/**/*.ts", "tools/replay/**/*.ts"]
+  "include": ["test/receipts/**/*.ts", "test/shared/**/*.ts", "tools/replay/**/*.ts", "tools/replay-scope/**/*.ts", "tools/scope-eval/*.ts", "test/scope-cop/scope-eval.test.ts","test/scope-cop/replay-scope.test.ts"]
 }

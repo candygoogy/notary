@@ -21,7 +21,7 @@ import { visibility } from '../../plugins/receipts/hooks/core/visibility.ts'
 import type { Verbosity } from '../../plugins/receipts/hooks/core/visibility.ts'
 
 // Sessions the Notary team ran to demo or probe Receipts.
-export const SKIP_PROJECTS = /notary-smoke|notary-tools-probe/i
+export const SKIP_PROJECTS = /notary-smoke|notary-tools-probe|scope-eval/i
 const REASONS: readonly Reason[] = ['carried-over', 'unrecognized-check-after', 'nothing-checked-after']
 
 // The options after the folder: a folder (first bare word) and --examples [n].

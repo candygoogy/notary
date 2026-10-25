@@ -28,7 +28,9 @@ jobs:
           claude plugin validate .
           claude plugin validate plugins/receipts
           claude plugin validate plugins/changes
+          claude plugin validate plugins/scope-cop
       - name: Mod tests
         run: |
           claude plugin test plugins/receipts
           claude plugin test plugins/changes
+          claude plugin test plugins/scope-cop

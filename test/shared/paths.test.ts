@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { relativeTo, shownPath } from '../../plugins/changes/hooks/core/paths.ts'
+import { relativeTo, shownPath } from '../../shared/paths.ts'
 
 test('relativeTo strips the root, with forward slashes', () => {
   assert.equal(relativeTo('C:/repo', 'C:\\repo\\src\\a.ts', true), 'src/a.ts')

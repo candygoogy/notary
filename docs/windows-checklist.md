@@ -109,6 +109,31 @@ Every revert is: `/changes`, select the turn, **Revert** on the file, then **Con
 | RW12 | Path spellings | Start `claude` from the 8.3 short path (see W10). Ask for edits to `ADD.JS` and then `add.js`. | One file in the pane, not two. Revert is exact. | |
 | RW13 | Outside git, and gitignored | In a folder with no git, ask Claude to change a file with `Set-Content`, then with Edit. In the scratch repo, add `secret.txt` to `.gitignore` and ask Claude to change it with PowerShell. | Outside git: only the Edit is listed. Gitignored with PowerShell: not listed. Both are documented limits, not bugs. | |
 
+## Scope Cop checks
+
+Scope Cop judges a path by its real spelling: `realPathOf` in `register.tsx` expands 8.3 names, resolves links and gets the real case, and a file that doesn't exist yet takes its nearest existing folder's real path. These checks confirm that against the real file system. The pure half is `test/scope-cop/scope.test.ts`.
+
+### Setup
+
+```powershell
+$dir = 'C:\Temp\scope cop scratch'
+New-Item -ItemType Directory -Force "$dir\src\auth", "$dir\src\db" | Out-Null
+Set-Location $dir
+'export const a = 1' | Set-Content src\auth\a.ts
+'export const b = 1' | Set-Content src\db\b.ts
+git init -q; git add -A; git commit -qm start
+cmd /c mklink /J "src\auth\dblink" "$dir\src\db"
+```
+
+Every check sends `/scope mode C`, then `/scope src/auth/**`, then the prompt, so an edit outside the scope ends as a visible deny. Headless, that is one `claude -p --model haiku --plugin-dir "<repo>\plugins\scope-cop" --input-format stream-json --output-format stream-json --verbose` session fed three user messages a few seconds apart (from Git Bash, set `MSYS_NO_PATHCONV=1`, or `/scope mode C` reaches the session as `C:/Program Files/Git/scope mode C`). Prompts name the tool and ask Claude to attempt the out-of-scope edit anyway. Reset with `git checkout -- .` between checks.
+
+| # | Check | Steps | Expected | Result |
+|---|---|---|---|---|
+| SW1 | 8.3 short path | Start from the short name (`C:\Temp\SCOPEC~1`, see W10). Ask Claude to Read, then Edit, `C:\Temp\SCOPEC~1\src\auth\a.ts` and `C:\Temp\SCOPEC~1\src\db\b.ts`, keeping the short spelling. | `a.ts` is edited. `b.ts` is denied, and the reason names `src/db/b.ts`. | ✅ 2026-10-25, 2.1.310, as expected. The engine itself refuses short-spelled Read/Edit paths in `default` and `acceptEdits` ("suspicious Windows path pattern that requires manual approval"), so the check needs `--permission-mode bypassPermissions` (or approving the prompt). Started from the short folder with long-spelled paths (acceptEdits): same result; the session reports the long `cwd`. |
+| SW2 | Junction inside the scope pointing out of it | Ask Claude to Read and Edit `src/auth/dblink/b.ts`, then Write `src/auth/dblink/new.ts`. | Both denied, with the real paths `src/db/b.ts` and `src/db/new.ts` in the reason. | ✅ 2026-10-25, 2.1.310, acceptEdits: both denied with the real paths. A file symlink (`mklink src\auth\bfile.ts …`) is skipped: "You do not have sufficient privilege to perform this operation" (no Developer Mode, no admin). |
+| SW3 | New files | Ask Claude to Write `src/auth/session/token.ts` (new folder in the scope), then `src/payments/pay.ts` (new folder out of it). | The first is created. The second is denied, naming `src/payments/pay.ts`. | ✅ 2026-10-25, 2.1.310, acceptEdits: as expected. |
+| SW4 | Case | Ask Claude to Read, then Edit, `c:\TEMP\Scope Cop Scratch\SRC\AUTH\A.TS` and `c:\TEMP\Scope Cop Scratch\Src\DB\B.TS`, keeping that spelling. | `A.TS` is edited (the real `a.ts`). `B.TS` is denied, and the reason names `src/db/b.ts`. | ✅ 2026-10-25, 2.1.310, as expected. In `acceptEdits` the engine refused both Reads ("you haven't granted it yet": it treats the re-cased path as outside the project), so the check ran in `bypassPermissions`. |
+
 ## Reporting
 
 For any unexpected result, write down:

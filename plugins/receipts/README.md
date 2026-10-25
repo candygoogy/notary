@@ -21,7 +21,7 @@ So "Done." after answering a question gets no verdict. Neither does "Committed."
 
 ### Which edits count
 
-An `Edit`, `Write` or `NotebookEdit` that landed counts when it changes code in the project. These don't count, because they can't break a test:
+An `Edit`, `Write` or `NotebookEdit` that landed counts when it changes code in the project. With the Changes mod installed, a file a shell command changed (`sed -i`, a codegen script, `git checkout`) counts too, inside a git repository only; a test run in that same command (`sed -i … && npm test`) still checks it. These don't count, because they can't break a test:
 - prose and notes: `.md` files, `CLAUDE.md`, memory files, `.claude/` and `.agent/`;
 - scratch and temp folders;
 - build output such as `target/`, `dist/` and `node_modules/`;
@@ -174,7 +174,7 @@ Pester only sets an exit code with `-CI`, so its summary is always read.
 
 - **English only.** Claims in other languages are not judged.
 - **It checks that checks ran, not what they cover.** A passing suite that doesn't test your change still counts as ✅.
-- **Shell edits don't count as edits.** Files changed by `sed -i`, `Set-Content` or a script don't reopen verification.
+- **Shell edits count only with Changes, inside git.** Without the Changes mod, or outside a git repository, files changed by `sed -i`, `Set-Content` or a script don't reopen verification.
   - A deliberate "break it, run one test (by name, or with `N filtered out`), put it back" check after a full pass doesn't overturn that pass.
   - The flip side: a script that breaks the code and *doesn't* restore it leaves the earlier ✅ standing.
 - **A revert from the Changes pane isn't an edit to Receipts.** It changes files outside Claude's tool calls, so a ✅ given before the revert still stands until Claude edits again.

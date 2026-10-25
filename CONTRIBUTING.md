@@ -36,6 +36,7 @@ To try a mod in a session from your checkout:
 ```
 claude --plugin-dir plugins/changes
 claude --plugin-dir plugins/receipts
+claude --plugin-dir plugins/scope-cop
 ```
 
 Saving a file under the plugin folder reloads it in that session.

@@ -1,0 +1,15 @@
+{
+  "name": "scope-cop",
+  "version": "0.1.0",
+  "description": "Say which files a task may touch. Scope Cop flags Claude's edits outside that scope, tells Claude, or blocks them if you want.",
+  "author": { "name": "Notary contributors" },
+  "license": "MIT",
+  "homepage": "https://github.com/candygoogy/notary/tree/main/plugins/scope-cop",
+  "repository": "https://github.com/candygoogy/notary",
+  "keywords": ["claude-code-mod", "scope", "guardrails", "notary"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "enabled": { "type": "boolean", "title": "Enabled", "description": "Turn Scope Cop on or off.", "default": true },
+    "mode": { "type": "string", "title": "Mode", "description": "What happens to an edit outside the scope. A: flag it. B: flag it and tell Claude. C: block it (Claude is told why).", "options": ["A", "B", "C"], "default": "B" }
+  }
+}

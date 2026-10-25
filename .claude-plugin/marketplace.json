@@ -16,6 +16,11 @@
       "name": "changes",
       "source": "./plugins/changes",
       "description": "See what Claude changed, turn by turn. Keep it or send it back."
+    },
+    {
+      "name": "scope-cop",
+      "source": "./plugins/scope-cop",
+      "description": "Claude stays inside the scope you set, and asks before leaving it."
     }
   ]
 }

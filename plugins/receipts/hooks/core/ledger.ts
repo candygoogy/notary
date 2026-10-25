@@ -1,6 +1,8 @@
 // The session's ordered record of edits and runs. Pure: every function returns
 // a new ledger, so the value can live in `$.state` as it is.
 
+import { lastSeq, shellEditsSince } from '../shared/changes-index.ts'
+import type { ChangesIndexView, ShellEdit } from '../shared/changes-index.ts'
 import { runnerOf } from './evidence.ts'
 import type { ClaimKind, Evidence, Ledger, LedgerEntry } from './types.ts'
 
@@ -14,8 +16,41 @@ export function recordEdit(l: Ledger, path: string, at: number, agentId?: string
   return append(l, agentId === undefined ? { seq: l.nextSeq, at, kind: 'edit', path } : { seq: l.nextSeq, at, agentId, kind: 'edit', path })
 }
 
-export function recordRun(l: Ledger, ev: Evidence, at: number, agentId?: string): Ledger {
-  return append(l, agentId === undefined ? { seq: l.nextSeq, at, kind: 'run', evidence: ev } : { seq: l.nextSeq, at, agentId, kind: 'run', evidence: ev })
+export function recordRun(l: Ledger, ev: Evidence, at: number, agentId?: string, toolUseId?: string): Ledger {
+  return append(l, {
+    seq: l.nextSeq,
+    at,
+    ...(agentId === undefined ? {} : { agentId }),
+    ...(toolUseId === undefined || toolUseId === '' ? {} : { toolUseId }),
+    kind: 'run',
+    evidence: ev,
+  })
+}
+
+// A file a shell command changed (Changes' record of it). When the run of that
+// same tool call is in the ledger already (`sed -i … && npm test`), the run
+// checked the change: the edit goes in just before it, taking its seq, and the
+// entries from the run on move one seq later. Otherwise it is appended.
+export function recordShellEdit(l: Ledger, path: string, at: number, toolUseId: string, agentId?: string): Ledger {
+  const i = toolUseId === '' ? -1 : l.entries.findIndex(entry => entry.kind === 'run' && entry.toolUseId === toolUseId)
+  if (i < 0) return recordEdit(l, path, at, agentId)
+  const seq = l.entries[i]!.seq
+  const edit: LedgerEntry = agentId === undefined ? { seq, at, kind: 'edit', path } : { seq, at, agentId, kind: 'edit', path }
+  const later = l.entries.slice(i).map(entry => ({ ...entry, seq: entry.seq + 1 }))
+  return { nextSeq: l.nextSeq + 1, entries: limit([...l.entries.slice(0, i), edit, ...later]) }
+}
+
+// What to record from Changes' index (any value: it is Changes' own), read up
+// to seq `seen` so far: the files shell commands changed since, oldest first,
+// and the seq it is read up to now. The turn-end sweep's files are left out:
+// no call explains them, and they may be the person's own edits. The first
+// read (`seen` null), and one after Changes started a fresh index, take where
+// it stands and record nothing older.
+export function readShellIndex(index: unknown, seen: number | null): { seen: number; edits: ShellEdit[] } {
+  const view = index as ChangesIndexView | undefined
+  const newest = lastSeq(view)
+  if (seen === null || newest < seen) return { seen: newest, edits: [] }
+  return { seen: newest, edits: shellEditsSince(view, seen).filter(edit => !edit.unattributed) }
 }
 
 // True when the turn that started at `turnStartSeq` has something to answer for:
@@ -78,6 +113,9 @@ function lastEditSeq(entries: readonly LedgerEntry[]): number {
 }
 
 function append(l: Ledger, entry: LedgerEntry): Ledger {
-  const entries = [...l.entries, entry]
-  return { nextSeq: l.nextSeq + 1, entries: entries.length > LEDGER_LIMIT ? entries.slice(-LEDGER_LIMIT) : entries }
+  return { nextSeq: l.nextSeq + 1, entries: limit([...l.entries, entry]) }
+}
+
+function limit(entries: LedgerEntry[]): LedgerEntry[] {
+  return entries.length > LEDGER_LIMIT ? entries.slice(-LEDGER_LIMIT) : entries
 }

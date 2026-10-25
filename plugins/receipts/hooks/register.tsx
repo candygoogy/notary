@@ -6,13 +6,14 @@ import { findClaims } from './core/claims.ts'
 import { stampText } from './core/copy.ts'
 import { isVerifiableEdit } from './core/edits.ts'
 import { classify } from './core/evidence.ts'
-import { editedSince, emptyLedger, recordEdit, recordRun } from './core/ledger.ts'
+import { editedSince, emptyLedger, readShellIndex, recordEdit, recordRun, recordShellEdit } from './core/ledger.ts'
 import type { Claim, DeclaredCheck, Mode, Verdict } from './core/types.ts'
 import { decide, judge } from './core/verdict.ts'
 import { bandStays, visibility } from './core/visibility.ts'
 import type { Verbosity, Visibility } from './core/visibility.ts'
 import { SMART_MAX_TOKENS, SMART_MODEL, SMART_SYSTEM, isYes } from './smartcheck.ts'
 import { ARGUMENT_HINT, DESCRIPTION, USAGE, editChecks, parseCommand } from './commands.ts'
+import type { ShellEdit } from './shared/changes-index.ts'
 import { waitingNote } from './shared/pane.ts'
 import { bandView } from './ui/band.tsx'
 import { paneView } from './ui/pane.tsx'
@@ -40,6 +41,10 @@ const INACTIVE = { plugin: 'receipts', key: 'inactive' } as const
 const STAMPED = { plugin: 'receipts', key: 'stamped' } as const
 // `/receipts` changes, for this conversation: over the settings, which can't always be saved.
 const OVERRIDES = { plugin: 'receipts', key: 'overrides' } as const
+// Changes' index seq read up to: files shell commands changed come from there.
+const SHELL_SEEN = { plugin: 'receipts', key: 'shellSeen' } as const
+// Changes' own (a soft dependency): read only, never trusted (shared/changes-index.ts).
+const CHANGES_INDEX = { plugin: 'changes', key: 'index' } as const
 
 const PANE = { id: 'receipts', title: 'Receipts' } as const
 
@@ -86,6 +91,9 @@ export const register: Register = (on, options) => {
   on('turn.start', async ($, e, next) => {
     const r = await next(e)
     if ((await activeOptions($, opts)) === null) return r
+    // Shell edits not read yet belong to the turn before; the first turn takes
+    // where Changes' index stands, so a resumed history does not flood in.
+    await readShellEdits($, await changesIndex($))
     try {
       const { value: ledger = emptyLedger() } = await $.state.get(LEDGER)
       await $.state.set(CURRENT_TURN, { turnId: e.turnId, startSeq: ledger.nextSeq })
@@ -107,6 +115,16 @@ export const register: Register = (on, options) => {
     return r
   }).catch(($, e, next) => next(e))
 
+  // Files a shell command changed, as Changes records them (inside a git
+  // repository only), as they land. Hook order between mods is no contract,
+  // so they are read again before an answer is judged.
+  on('state.set', { plugin: 'changes', key: 'index' }, async ($, e, next) => {
+    const r = await next(e)
+    if (r.value?.isSet !== true || (await activeOptions($, opts)) === null) return r
+    await readShellEdits($, e.value)
+    return r
+  }).catch(($, e, next) => next(e))
+
   // Judges the answer Claude wants to stop on. A contradicted (or, in mode C,
   // unverified) claim is sent back once; the answer that is allowed to stand
   // gets the stamp here, inside the turn: a row appended from turn.complete,
@@ -118,6 +136,7 @@ export const register: Register = (on, options) => {
     let shown: Visibility | null = null
     let sendBack: string | null = null
     let turnId = ''
+    await readShellEdits($, await changesIndex($))
     try {
       const turn = (await $.state.get(CURRENT_TURN)).value ?? null
       turnId = turn?.turnId ?? ''
@@ -158,6 +177,7 @@ export const register: Register = (on, options) => {
       // The turn of a prompt that carried the reminder ends, answered or not.
       const { value: reminded = false } = await $.state.get(REMINDED)
       if (reminded) await $.state.set(REMINDED, false)
+      if (e.reason === 'answer') await readShellEdits($, await changesIndex($))
       const judged = e.reason === 'answer' ? await settle($, active, e.turnId, e.answer) : false
       const { value: last = null } = await $.state.get(LAST)
       if (last !== null && !bandStays(last.kind, { at: 'turn-end', reminded, judged })) await $.state.set(LAST, null)
@@ -370,7 +390,49 @@ async function record($: Engine, e: { tool: string; agentId?: string } & Record<
     },
     checks,
   )
-  await update($, LEDGER, (ledger = emptyLedger()) => recordRun(ledger, evidence, at, e.agentId))
+  const toolUseId = typeof e.tool_use_id === 'string' ? e.tool_use_id : undefined
+  await update($, LEDGER, (ledger = emptyLedger()) => recordRun(ledger, evidence, at, e.agentId, toolUseId))
+}
+
+// Records the files shell commands changed since Changes' index was last read
+// (readShellIndex), each once, less those that don't reopen verification.
+// Changes not installed: no index, nothing to read. Never throws.
+async function readShellEdits($: Engine, index: unknown): Promise<void> {
+  try {
+    // Most of Changes' writes add no edit (a turn opened, a view changed).
+    const { value: last = null } = await $.state.get(SHELL_SEEN)
+    if (last !== null && readShellIndex(index, last).seen === last) return
+    const read: { edits: ShellEdit[] } = { edits: [] }
+    // Claimed in one step, so two readers never record the same edit twice.
+    await update($, SHELL_SEEN, (seen = null) => {
+      const next = readShellIndex(index, seen)
+      read.edits = next.edits
+      return next.seen
+    })
+    const edits = read.edits
+    if (edits.length === 0) return
+    const at = await $.clock.now()
+    const cwd = await projectDir($)
+    const kept: ShellEdit[] = []
+    for (const edit of edits) {
+      const path = await realPathOf($, edit.path)
+      if (isVerifiableEdit(path, cwd)) kept.push({ ...edit, path })
+    }
+    if (kept.length === 0) return
+    await update($, LEDGER, (ledger = emptyLedger()) => kept.reduce((l, edit) => recordShellEdit(l, edit.path, at, edit.toolUseId, edit.agentId), ledger))
+  } catch (error) {
+    debug($, 'shell edits', error)
+  }
+}
+
+// Changes' index, or undefined: Changes may not be installed.
+async function changesIndex($: Engine): Promise<unknown> {
+  try {
+    return (await $.state.get(CHANGES_INDEX)).value
+  } catch (error) {
+    debug($, 'changes index', error)
+    return undefined
+  }
 }
 
 // Judges an answer once: classic.Stop and turn.complete share the verdict for
@@ -504,6 +566,8 @@ async function resetConversation($: Engine): Promise<void> {
   await $.state.set(PENDING_NUDGE, null)
   await $.state.set(REMINDED, false)
   await $.state.set(STAMPED, null)
+  // Changes starts its index again too: the next turn takes where it stands.
+  await $.state.set(SHELL_SEEN, null)
 }
 
 // A short, stable fingerprint of a text (FNV-1a), for dedupe keys.

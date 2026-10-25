@@ -8,7 +8,7 @@
 
 Changes is a [Claude Code mod](https://code.claude.com/docs/en/plugins/mods/overview). It keeps a timeline of what Claude changed in each turn of your session, including through subagents, with each file's diff and a **Revert** that puts the file back the way it was before that turn.
 
-Notary is a suite of small mods that check Claude's work for you. **Changes** shows you what changed and lets you undo it. **Receipts** checks Claude's "all tests pass" against what it actually ran.
+Notary is a suite of small mods that check Claude's work for you. **Changes** shows you what changed and lets you undo it. **Receipts** checks Claude's "all tests pass" against what it actually ran. **Scope Cop** keeps Claude inside the files you said a task may touch.
 
 ## Install
 
@@ -22,7 +22,11 @@ At the prompt of a Claude Code session in a terminal (Claude Code 2.1.287 or lat
 /plugin install receipts --marketplace candygoogy/notary
 ```
 
-Each mod installs on its own; take one or both. Answer `y` to add the marketplace, then pick a scope (user scope makes it load in every session). A mod is active right away. Once installed at user scope, it also runs in the Claude desktop app's Code tab.
+```
+/plugin install scope-cop --marketplace candygoogy/notary
+```
+
+Each mod installs on its own; take any of them. Answer `y` to add the marketplace, then pick a scope (user scope makes it load in every session). A mod is active right away. Once installed at user scope, it also runs in the Claude desktop app's Code tab.
 
 From your shell instead (Claude Code 2.1.292 or later): `claude plugin install changes --marketplace candygoogy/notary`. If it says options are "not yet set", that's fine: every option has a default, so there's nothing to set up.
 
@@ -155,16 +159,36 @@ Change them in the `/config` menu, or with the command:
 - **English only.** v1 recognizes claims written in English. A Turkish "testler geçiyor" is not judged.
 - **It checks that checks ran, not what they cover.** A passing test suite that doesn't test your change still counts as ✅.
 - **Background runs.** A test started in the background with no result yet is not evidence, so the claim is ⚠️ until it finishes.
-- **Edits made through the shell** (`sed -i`, `Set-Content`, a script) are not counted as edits, so they don't reopen verification.
+- **Edits made through the shell** (`sed -i`, `Set-Content`, a script) count as edits only with Changes installed, inside a git repository. Otherwise they don't reopen verification.
   - A "break it on purpose, run one test, put it back" check is fine: a failing run of part of the suite after a full pass of the same runner doesn't overturn that pass.
   - The flip side: if such a script breaks the code and *doesn't* put it back, Receipts still shows the earlier ✅.
 - **A revert from the Changes pane isn't an edit to Receipts.** A ✅ given before the revert stands until Claude edits again.
 - **Subagents' own reports** aren't judged. Their edits and test runs do count toward the main conversation's claims.
 - **Long, mixed sentences** ("Fixed the parser, but the timezone case is left") are skipped unless smart check is on.
 
+## Scope Cop
+
+**Claude stays inside the scope you set, and asks before leaving it.**
+
+```
+/scope src/auth/** test/auth/**
+```
+
+Every prompt after that tells Claude the scope. Claude keeps its edits inside it, and when the task needs a file outside, it stops and names the file so you can say yes. Edits outside the scope are flagged on a line above the prompt and in the **Scope** pane (`/scope`). An edit to a file Claude named before you said yes is listed as approved, not flagged.
+
+| Mode | Outside the scope |
+|---|---|
+| **A** | Flagged. |
+| **B** (default) | Flagged, and Claude is told. |
+| **C** | Blocked before it runs; Claude is told to ask you. |
+
+A scope includes its own tests (`test/auth/**` for `src/auth/**`). Claude's own files, temp and scratch folders, screenshot and cache folders, and lockfiles are always allowed. With Changes installed, inside git, files that shell commands changed are checked too.
+
+What it costs: when a task needs a file outside the scope, it takes a round trip. In our eval of 20 focused tasks (Opus), Claude never wandered outside a scope it was given (2 of 20 runs did without one), and 1 in 5 tasks needed a yes. It is a guardrail, not a security boundary. See the [Scope Cop README](plugins/scope-cop/README.md) for patterns, modes and limits.
+
 ## Privacy
 
-Both mods run entirely on your machine. They make no network requests, collect no telemetry, and make no model calls. Nothing they keep leaves your machine.
+All three mods run entirely on your machine. They make no network requests, collect no telemetry, and make no model calls. Nothing they keep leaves your machine.
 
 Changes keeps a copy of each file Claude changed, and the conversation's history of those changes, in `~/.claude/plugin-data/notary-changes/`. It keeps them for 7 days after you last used the conversation, so a resumed conversation can still revert, and holds all of them under 1 GB. The copies can include secrets, such as a `.env` file Claude edited. `/changes forget` deletes the current conversation's copies now, and setting `keepHistoryDays` to `0` deletes them at the end of every session.
 
@@ -175,8 +199,8 @@ The one exception is Receipts' **smart check**, which is off unless you turn it 
 | Mod | What it does | Status |
 |---|---|---|
 | **Changes** | A per-turn timeline of what Claude changed, with a diff and Keep/Revert per file | v0.2 |
-| **Receipts** | Flags success claims no check backs up | v0.2 |
-| **Scope Cop** | Blocks edits outside the scope you declared | planned |
+| **Receipts** | Flags success claims no check backs up | v0.3 |
+| **Scope Cop** | Claude stays inside the scope you set, and asks before leaving it | v0.1 |
 
 ## Contributing
 

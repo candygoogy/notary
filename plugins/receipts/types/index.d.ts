@@ -12,7 +12,7 @@ export type ReceiptsEvidence = {
 }
 export type ReceiptsLedgerEntry =
   | { seq: number; at: number; agentId?: string; kind: 'edit'; path: string }
-  | { seq: number; at: number; agentId?: string; kind: 'run'; evidence: ReceiptsEvidence }
+  | { seq: number; at: number; agentId?: string; toolUseId?: string; kind: 'run'; evidence: ReceiptsEvidence }
 export type ReceiptsLedger = { nextSeq: number; entries: ReceiptsLedgerEntry[] }
 export type ReceiptsVerdict = {
   kind: 'verified' | 'unverified' | 'contradicted'
@@ -48,6 +48,11 @@ declare module 'claude-code' {
       inactive: boolean
       stamped: string | null
       overrides: Overrides | null
+      // Changes' index seq read up to (files shell commands changed are read
+      // from it); null until the first turn takes it.
+      shellSeen: number | null
     }
+    // Read only, defensively (shared/changes-index.ts): the index is Changes' own.
+    changes: { index: unknown }
   }
 }

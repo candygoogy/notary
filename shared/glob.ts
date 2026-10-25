@@ -1,0 +1,78 @@
+// Gitignore-style patterns, anchored at a root: `*` and `?` stay inside one
+// folder, `**` crosses folders, a trailing `/` (or `/**`) means "under this
+// folder", a leading `!` excludes. A pattern also covers everything under a
+// folder it names. The last pattern that matches decides. Pure.
+
+export type Pattern = { source: string; negate: boolean; re: RegExp }
+
+export type PatternError = { pattern: string; error: string }
+
+export function parsePattern(text: string, isWindows: boolean): { pattern: Pattern } | PatternError {
+  const raw = text.trim()
+  let body = raw.replace(/\\/g, '/')
+  const negate = body.startsWith('!')
+  if (negate) body = body.slice(1)
+  if (body.startsWith('//')) return { pattern: raw, error: 'a network path is not a pattern under the project' }
+  if (/^[A-Za-z]:/.test(body)) return { pattern: raw, error: 'an absolute path is not a pattern under the project' }
+  body = body.replace(/^(\.\/|\/)+/, '')
+  const segments = body.split('/')
+  if (segments.includes('..')) return { pattern: raw, error: '`..` leaves the project' }
+  body = segments.filter(s => s !== '.').join('/')
+  let under = false
+  if (body.endsWith('/**')) {
+    body = body.slice(0, -3)
+    under = true
+  }
+  if (body.endsWith('/')) {
+    body = body.replace(/\/+$/, '')
+    under = true
+  }
+  if (body === '' && !under) return { pattern: raw, error: 'empty pattern' }
+  if (body === '' || body === '**') return { pattern: raw, error: 'the whole project is not a scope' }
+  const tail = under ? '/.+' : '(?:/.*)?'
+  const re = new RegExp(`^${toRegex(body)}${tail}$`, isWindows ? 'i' : '')
+  return { pattern: { source: raw, negate, re } }
+}
+
+export function compilePatterns(texts: readonly string[], isWindows: boolean): { patterns: Pattern[] } | { errors: PatternError[] } {
+  const patterns: Pattern[] = []
+  const errors: PatternError[] = []
+  for (const text of texts) {
+    const r = parsePattern(text, isWindows)
+    if ('error' in r) errors.push(r)
+    else patterns.push(r.pattern)
+  }
+  return errors.length > 0 ? { errors } : { patterns }
+}
+
+// `path` is relative to the root the patterns are anchored at.
+export function matchesAny(patterns: readonly Pattern[], path: string): boolean {
+  const rel = path.replace(/\\/g, '/').replace(/^(\.\/|\/)+/, '')
+  let inside = false
+  for (const p of patterns) if (p.re.test(rel)) inside = !p.negate
+  return inside
+}
+
+function toRegex(body: string): string {
+  let out = ''
+  let i = 0
+  while (i < body.length) {
+    if (body.startsWith('**/', i) && (i === 0 || body[i - 1] === '/')) {
+      out += '(?:.*/)?'
+      i += 3
+    } else if (body.startsWith('**', i)) {
+      out += '.*'
+      i += 2
+    } else if (body[i] === '*') {
+      out += '[^/]*'
+      i += 1
+    } else if (body[i] === '?') {
+      out += '[^/]'
+      i += 1
+    } else {
+      out += body[i]!.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      i += 1
+    }
+  }
+  return out
+}
