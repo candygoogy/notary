@@ -23,6 +23,14 @@ export type ReceiptsVerdict = {
 export type HistoryItem = { turnId: string; at: number; verdict: ReceiptsVerdict }
 export type CurrentTurn = { turnId: string; startSeq: number }
 export type Judged = { key: string; verdict: ReceiptsVerdict | null }
+// `/receipts` changes for this conversation, over the settings (Options in hooks/register.tsx).
+export type Overrides = {
+  mode?: 'A' | 'B' | 'C'
+  enabled?: boolean
+  smartCheck?: boolean
+  verbosity?: 'quiet' | 'all'
+  checks?: Array<{ kind: 'tests' | 'build'; prefix: string }>
+}
 
 declare module 'claude-code' {
   interface PluginState {
@@ -39,6 +47,7 @@ declare module 'claude-code' {
       reminded: boolean
       inactive: boolean
       stamped: string | null
+      overrides: Overrides | null
     }
   }
 }

@@ -171,12 +171,12 @@ function blankIgnored(text: string): { prose: string; codes: string[] } {
   for (const line of lines) {
     const opener = /^\s*(`{3,}|~{3,})/.exec(line)
     if (fence !== null) {
-      if (opener !== null && opener[1][0] === fence[0] && opener[1].length >= fence.length) fence = null
+      if (opener !== null && opener[1]![0] === fence[0] && opener[1]!.length >= fence.length) fence = null
       kept.push('')
       continue
     }
     if (opener !== null) {
-      fence = opener[1]
+      fence = opener[1]!
       kept.push('')
       continue
     }
@@ -196,7 +196,7 @@ function blankIgnored(text: string): { prose: string; codes: string[] } {
 function isHeading(line: string): boolean {
   if (/^\s*#{1,6}\s/.test(line)) return true
   const bold = /^\s*(?:\*\*|__)([^*_]+)(?:\*\*|__)\s*:?\s*$/.exec(line)
-  return bold !== null && !/[.!?]\s*$/.test(bold[1]) && !isTerse(bold[1])
+  return bold !== null && !/[.!?]\s*$/.test(bold[1]!) && !isTerse(bold[1]!)
 }
 
 // Splits after . ! ? (and any closing emphasis or quote: "passes.**") and at newlines.

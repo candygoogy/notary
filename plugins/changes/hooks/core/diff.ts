@@ -132,7 +132,7 @@ function myers(a: Int32Array, b: Int32Array, max: number): Region[] | null {
   for (let d = 0; d <= limit; d++) {
     trace.push(d === 0 ? new Int32Array(0) : v.slice(offset - (d - 1), offset + d))
     for (let k = -d; k <= d; k += 2) {
-      let x = k === -d || (k !== d && v[offset + k - 1] < v[offset + k + 1]) ? v[offset + k + 1] : v[offset + k - 1] + 1
+      let x = k === -d || (k !== d && v[offset + k - 1]! < v[offset + k + 1]!) ? v[offset + k + 1]! : v[offset + k - 1]! + 1
       let y = x - k
       while (x < n && y < m && a[x] === b[y]) {
         x++
@@ -151,8 +151,8 @@ function backtrack(trace: Int32Array[], depth: number, n: number, m: number): Re
   let x = n
   let y = m
   for (let d = depth; d > 0; d--) {
-    const frontier = trace[d]
-    const at = (k: number) => frontier[k + d - 1]
+    const frontier = trace[d]!
+    const at = (k: number) => frontier[k + d - 1]!
     const k = x - y
     const prevK = k === -d || (k !== d && at(k - 1) < at(k + 1)) ? k + 1 : k - 1
     const prevX = at(prevK)
@@ -178,8 +178,8 @@ function regionsOf(deleted: number[], inserted: number[], n: number, m: number):
   let x = 0
   let y = 0
   while (i < deleted.length || j < inserted.length) {
-    const nextDel = i < deleted.length ? deleted[i] : n
-    const nextIns = j < inserted.length ? inserted[j] : m
+    const nextDel = i < deleted.length ? deleted[i]! : n
+    const nextIns = j < inserted.length ? inserted[j]! : m
     // Equal lines advance both sides until one of them reaches its next change.
     const skip = Math.min(nextDel - x, nextIns - y)
     x += skip
@@ -212,9 +212,9 @@ function formatHunks(regions: Region[], a: Side, b: Side, context: number): { hu
   let g = 0
   while (g < regions.length) {
     let h = g
-    while (h + 1 < regions.length && regions[h + 1].a0 - regions[h].a1 <= 2 * context) h++
-    const first = regions[g]
-    const last = regions[h]
+    while (h + 1 < regions.length && regions[h + 1]!.a0 - regions[h]!.a1 <= 2 * context) h++
+    const first = regions[g]!
+    const last = regions[h]!
     const oldStart = Math.max(0, first.a0 - context)
     const oldEnd = Math.min(n, last.a1 + context)
     const newStart = first.b0 - (first.a0 - oldStart)
@@ -225,20 +225,20 @@ function formatHunks(regions: Region[], a: Side, b: Side, context: number): { hu
 
     const pushContext = (from: number, to: number) => {
       for (let i = from; i < to; i++) {
-        rows.push(' ' + visible(a.lines[i]))
+        rows.push(' ' + visible(a.lines[i]!))
         if (isLastOf(a, i)) rows.push(NO_EOL)
       }
     }
     let at = oldStart
     for (let r = g; r <= h; r++) {
-      const region = regions[r]
+      const region = regions[r]!
       pushContext(at, region.a0)
       for (let i = region.a0; i < region.a1; i++) {
-        rows.push('-' + visible(a.lines[i]))
+        rows.push('-' + visible(a.lines[i]!))
         if (isLastOf(a, i)) rows.push(NO_EOL)
       }
       for (let i = region.b0; i < region.b1; i++) {
-        rows.push('+' + visible(b.lines[i]))
+        rows.push('+' + visible(b.lines[i]!))
         if (isLastOf(b, i)) rows.push(NO_EOL)
       }
       removed += region.a1 - region.a0
@@ -260,7 +260,7 @@ export function limitHunks(hunks: string, maxRows: number): { hunks: string; sho
   const groups: string[][] = []
   for (const row of hunks.split('\n')) {
     if (row.startsWith('@@')) groups.push([row])
-    else groups[groups.length - 1].push(row)
+    else groups[groups.length - 1]!.push(row)
   }
   const bodyRows = (g: string[]) => g.length - 1
   const totalRows = groups.reduce((sum, g) => sum + bodyRows(g), 0)
@@ -284,8 +284,8 @@ export function limitHunks(hunks: string, maxRows: number): { hunks: string; sho
 // The first `maxRows` rows of one hunk under a header that counts them.
 function recount(group: string[], maxRows: number): string[] {
   const rows = group.slice(1, 1 + maxRows)
-  const header = /^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/.exec(group[0])
-  const [oldStart, oldWas, newStart, newWas] = header ? header.slice(1).map(Number) : [1, 1, 1, 1]
+  const header = /^@@ -(\d+),(\d+) \+(\d+),(\d+) @@/.exec(group[0]!)
+  const [oldStart, oldWas, newStart, newWas] = (header ? header.slice(1).map(Number) : [1, 1, 1, 1]) as [number, number, number, number]
   const oldLen = rows.filter(r => r[0] === ' ' || r[0] === '-').length
   const newLen = rows.filter(r => r[0] === ' ' || r[0] === '+').length
   // A side left with no rows names the line before it, as a header does.

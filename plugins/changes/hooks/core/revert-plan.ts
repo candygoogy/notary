@@ -67,7 +67,7 @@ export function planRevert(
   const isLive = (e: EditRecord) => e.via !== 'revert' && statusOf(index, e.turnId, e.key) !== 'reverted'
   const firstLiveSeq = (turnId: string) => Math.min(...history.filter(e => e.turnId === turnId && isLive(e)).map(e => e.seq))
 
-  let start = own[0].seq
+  let start = own[0]!.seq
   const involved = new Set([ref.turnId])
   if (mode === 'turnAndLater') {
     // Widen to the first live edit of every turn with a live edit in the span,
@@ -92,17 +92,17 @@ export function planRevert(
 
   if (!options.acceptOutsideChanges) {
     for (let i = 1; i < span.length; i++) {
-      const link = sameContent(span[i - 1].after, span[i].before)
+      const link = sameContent(span[i - 1]!.after, span[i]!.before)
       if (link === true) continue
-      const between: [string, string] = [span[i - 1].turnId, span[i].turnId]
-      if ((index.trimmed[ref.key] ?? 0) > span[i - 1].seq) return { ok: false, reason: 'history-trimmed', between }
+      const between: [string, string] = [span[i - 1]!.turnId, span[i]!.turnId]
+      if ((index.trimmed[ref.key] ?? 0) > span[i - 1]!.seq) return { ok: false, reason: 'history-trimmed', between }
       return { ok: false, reason: link === null ? 'unverifiable-link' : 'user-changed-between', between }
     }
   }
 
-  if (sameContent(current, span[span.length - 1].after) !== true) return { ok: false, reason: 'changed-externally' }
+  if (sameContent(current, span[span.length - 1]!.after) !== true) return { ok: false, reason: 'changed-externally' }
 
-  const target = span[0].before
+  const target = span[0]!.before
   if (mode === 'turn' && span.length === own.length && sameContent(target, current) === true) {
     return { ok: false, reason: 'nothing-to-revert' }
   }
@@ -110,7 +110,7 @@ export function planRevert(
     .filter(turnId => turnId !== REVERT_TURN && span.some(e => e.turnId === turnId && isLive(e)))
     .sort((a, b) => firstLiveSeq(a) - firstLiveSeq(b))
     .map(turnId => ({ turnId, key: ref.key }))
-  const widenedTo = refs.map(r => r.turnId).filter(turnId => firstLiveSeq(turnId) < own[0].seq)
+  const widenedTo = refs.map(r => r.turnId).filter(turnId => firstLiveSeq(turnId) < own[0]!.seq)
   const plan = (restore: Restore): RevertPlan =>
     widenedTo.length > 0 ? { ok: true, target, restore, refs, widenedTo } : { ok: true, target, restore, refs }
 

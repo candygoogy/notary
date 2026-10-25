@@ -167,10 +167,10 @@ export function classify(run: RunInput, checks: readonly DeclaredCheck[] = []): 
   const steps = segments.filter(segment => !TRIVIAL_STEP.test(display(segment.text)))
   const readsOnly = steps.length > 0 && steps.every(segment => READER.test(coreOf(segment.text)))
   if (best.strength !== 'strong' && !readsOnly && runnerSummaries(whole).length > 0) {
-    const index = best.index >= 0 ? best.index : segments.indexOf(steps[0] ?? segments[0])
+    const index = best.index >= 0 ? best.index : segments.indexOf(steps[0] ?? segments[0]!)
     best = { index, strength: 'strong' }
   }
-  const command = best.index < 0 ? display(run.command) : display(segments[best.index].text)
+  const command = best.index < 0 ? display(run.command) : display(segments[best.index]!.text)
   const shown = truncate(command, COMMAND_CHARS)
   if (best.strength === 'none' || isSwallowed(segments, best.index)) {
     return { strength: 'none', outcome: run.isError ? 'fail' : 'pass', command, summary: `${shown}: not a check` }
@@ -188,7 +188,7 @@ export function classify(run: RunInput, checks: readonly DeclaredCheck[] = []): 
   const exitCode = echoed ?? (run.isError ? (/^Exit code (\d+)/.exec(run.text.slice(0, 40))?.[1] ?? null) : '0')
   // A failing run of part of the suite (a mutation check, one test by name) is
   // marked, so it cannot overturn an earlier full pass (ledger.ts).
-  const isSubset = SUBSET_OUTPUT.test(out) || SUBSET_COMMAND.test(coreOf(segments[best.index].text))
+  const isSubset = SUBSET_OUTPUT.test(out) || SUBSET_COMMAND.test(coreOf(segments[best.index]!.text))
   const result = (outcome: Evidence['outcome'], summary: string, strength: Strength = best.strength): Evidence =>
     outcome === 'fail' && isSubset && strength !== 'none' ? { strength, outcome, command, summary, subset: true } : { strength, outcome, command, summary }
   const failed = (detail: string | null) =>
@@ -217,7 +217,7 @@ export function classify(run: RunInput, checks: readonly DeclaredCheck[] = []): 
 
   // A runner's own summary that reports failures is its verdict, whatever the
   // exit code (Pester exits 0 on failures without -CI; a wrapper may swallow it).
-  if (failing.length > 0) return result('fail', failed(summaryFail > 0 ? `${summaryFail} failed` : truncate(failing[0].trim(), COMMAND_CHARS)))
+  if (failing.length > 0) return result('fail', failed(summaryFail > 0 ? `${summaryFail} failed` : truncate(failing[0]!.trim(), COMMAND_CHARS)))
 
   // The exit code is the runner's (nothing after it can replace it, or it was
   // echoed right after): it decides. Words in the output (a test named "returns
@@ -244,7 +244,7 @@ export function classify(run: RunInput, checks: readonly DeclaredCheck[] = []): 
   if (compile !== undefined) return result('fail', failed(truncate(compile, COMMAND_CHARS)))
   // A build, type or lint tool's own all-clear line. Its failure lines are not
   // read here: a later step (`ruff check --select ALL`) may have printed them.
-  const toolPass = TOOL_PASS_LINES[coreOf(segments[best.index].text).split(/\s+/)[0]]
+  const toolPass = TOOL_PASS_LINES[coreOf(segments[best.index]!.text).split(/\s+/)[0]!]
   if (best.strength === 'medium' && toolPass !== undefined && toolPass.test(out)) return result('pass', `${shown} passed`)
   return result('pass', `${shown}: exit code hidden`, 'none')
 }
@@ -277,7 +277,7 @@ function ownsExitCode(run: RunInput, segments: Segment[], index: number, echoed:
   if (isMasked(run, segments, index)) return false
   if (exitCode === '0') return true
   let next = index + 1
-  while (next < segments.length && segments[next - 1].connector === '|') next++
+  while (next < segments.length && segments[next - 1]!.connector === '|') next++
   return segments.slice(next).every(segment => TRIVIAL_STEP.test(display(segment.text)))
 }
 
@@ -285,7 +285,7 @@ function ownsExitCode(run: RunInput, segments: Segment[], index: number, echoed:
 // its arguments: red-green in one command (`vitest run test/a.test.ts`, fix,
 // `vitest run`) ends with the last invocation, whose summary decides.
 function isRepeated(segments: Segment[], index: number): boolean {
-  const runner = runnerOf(segments[index].text)
+  const runner = runnerOf(segments[index]!.text)
   return segments.filter(segment => runnerOf(segment.text) === runner).length > 1
 }
 
@@ -300,7 +300,7 @@ export function runnerOf(segment: string): string {
 
 function fromLastSummary(out: string): string {
   const lines = out.split('\n')
-  for (let i = lines.length - 1; i >= 0; i--) if (SUMMARY_LINE.test(lines[i])) return lines.slice(i).join('\n')
+  for (let i = lines.length - 1; i >= 0; i--) if (SUMMARY_LINE.test(lines[i]!)) return lines.slice(i).join('\n')
   return out
 }
 
@@ -310,9 +310,9 @@ function stepsBefore(command: string, segments: Segment[], index: number): Segme
   const stopsOnError = /\bset\s+-\w*e/.test(command)
   const steps: Segment[] = []
   for (let i = index - 1; i >= 0; i--) {
-    const connector = segments[i].connector
+    const connector = segments[i]!.connector
     if (connector !== '&&' && !(connector === ';' && stopsOnError)) break
-    if (!TRIVIAL_STEP.test(display(segments[i].text))) steps.unshift(segments[i])
+    if (!TRIVIAL_STEP.test(display(segments[i]!.text))) steps.unshift(segments[i]!)
   }
   return steps
 }
@@ -360,9 +360,9 @@ function coreOf(segment: string): string {
       .replace(/^(?:yarn|pnpm)\s+(?=(?:vitest|jest|mocha|tsc|vue-tsc|eslint|playwright|biome)\b)/, '')
     const [first = '', ...rest] = words(core)
     const program = basename(first)
-    if (program === 'node' && rest.length > 0 && /[/\\]/.test(rest[0])) {
-      const pkg = /node_modules[/\\](?:@([^/\\]+)[/\\])?([^/\\]+)/.exec(rest[0])
-      core = [pkg !== null ? (pkg[1] ?? pkg[2]) : basename(rest[0]), ...rest.slice(1)].join(' ')
+    if (program === 'node' && rest.length > 0 && /[/\\]/.test(rest[0]!)) {
+      const pkg = /node_modules[/\\](?:@([^/\\]+)[/\\])?([^/\\]+)/.exec(rest[0]!)
+      core = [pkg !== null ? (pkg[1] ?? pkg[2]) : basename(rest[0]!), ...rest.slice(1)].join(' ')
     } else {
       core = [program, ...rest].join(' ')
     }
@@ -438,9 +438,9 @@ function split(command: string): Segment[] {
 function isMasked(run: RunInput, segments: Segment[], index: number): boolean {
   if (segments.slice(index).some(segment => segment.connector === '||')) return true
   if (run.tool === 'PowerShell') {
-    return segments.slice(index + 1).some((segment, i) => segments[index + i].connector !== '|' && !PS_NOT_NATIVE.test(display(segment.text)))
+    return segments.slice(index + 1).some((segment, i) => segments[index + i]!.connector !== '|' && !PS_NOT_NATIVE.test(display(segment.text)))
   }
-  const connector = segments[index].connector
+  const connector = segments[index]!.connector
   if (connector === '|') return !/\bpipefail\b/.test(run.command)
   return connector === ';' || connector === '&'
 }
@@ -450,9 +450,9 @@ function isMasked(run: RunInput, segments: Segment[], index: number): boolean {
 // directly follows the run's statement. In Bash, `$?` after `npm test | grep`
 // is grep's status (without pipefail), so it says nothing about the runner.
 function echoedStatus(run: RunInput, segments: Segment[], index: number, out: string): string | null {
-  if (run.tool === 'Bash' && segments[index].connector === '|' && !/\bpipefail\b/.test(run.command)) return null
+  if (run.tool === 'Bash' && segments[index]!.connector === '|' && !/\bpipefail\b/.test(run.command)) return null
   let next = index + 1
-  while (next < segments.length && segments[next - 1].connector === '|') next++
+  while (next < segments.length && segments[next - 1]!.connector === '|') next++
   const echo = segments[next]
   if (echo === undefined) return null
   const variable = run.tool === 'PowerShell' ? /\$LASTEXITCODE\b/i : /\$\?/
@@ -469,7 +469,7 @@ function echoedStatus(run: RunInput, segments: Segment[], index: number, out: st
 
 function isSwallowed(segments: Segment[], index: number): boolean {
   for (let i = index; i < segments.length - 1; i++) {
-    if (segments[i].connector === '||' && SWALLOW.test(segments[i + 1].text)) return true
+    if (segments[i]!.connector === '||' && SWALLOW.test(segments[i + 1]!.text)) return true
   }
   return false
 }

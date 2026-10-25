@@ -1,0 +1,9 @@
+{
+  // Claude Code writes this file only when it's missing, so the override stays.
+  // The unit tests run these files under `node --test`, which needs the `.ts`
+  // in import paths.
+  "extends": "./.claude-plugin/types/tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true
+  }
+}

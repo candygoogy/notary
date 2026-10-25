@@ -175,10 +175,10 @@ export function turnFiles(index: Index, turnId: string, node?: string): FileChan
   const byKey = new Map<string, EditRecord[]>()
   for (const e of edits) byKey.set(e.key, [...(byKey.get(e.key) ?? []), e])
   return [...byKey.entries()].map(([key, list]) => {
-    const first = list[0]
-    const last = list[list.length - 1]
+    const first = list[0]!
+    const last = list[list.length - 1]!
     const interleaved = list.some(e => e.interleaved === true)
-    const chainBroken = !interleaved && list.some((e, i) => i > 0 && sameContent(list[i - 1].after, e.before) === false)
+    const chainBroken = !interleaved && list.some((e, i) => i > 0 && sameContent(list[i - 1]!.after, e.before) === false)
     return {
       turnId,
       key,
@@ -268,7 +268,7 @@ function agentAndDescendants(index: Index, agentId: string): Set<string> {
 }
 
 function lastEditOf(edits: EditRecord[], key: string): EditRecord | undefined {
-  for (let i = edits.length - 1; i >= 0; i--) if (edits[i].key === key) return edits[i]
+  for (let i = edits.length - 1; i >= 0; i--) if (edits[i]!.key === key) return edits[i]
   return undefined
 }
 

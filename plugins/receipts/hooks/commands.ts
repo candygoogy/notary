@@ -21,7 +21,7 @@ export function parseCommand(args: string): CommandPlan {
   const checks = parseCheckCommand(args.trim())
   if (checks !== null) return checks
   const words = args.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  const [first, second] = words
+  const [first = '', second = ''] = words
   if (words.length === 0) return { kind: 'open' }
   if (words.length === 2 && first === 'mode' && ['a', 'b', 'c'].includes(second)) {
     const mode = second.toUpperCase()
@@ -45,16 +45,16 @@ function parseCheckCommand(args: string): CommandPlan | null {
   const match = /^(checks|check)(?:\s+(list|add|remove))?\s*(.*)$/i.exec(args)
   if (match === null) return null
   const action = (match[2] ?? 'list').toLowerCase()
-  const rest = match[3].trim()
+  const rest = match[3]!.trim()
   if (action === 'list') return rest === '' ? { kind: 'checks', action: 'list' } : { kind: 'usage' }
   if (action === 'remove') {
     const prefix = unquote(rest)
     return prefix === '' ? { kind: 'usage' } : { kind: 'checks', action: 'remove', prefix }
   }
   const add = /^(.*\S)\s+(tests?|build)$/i.exec(rest)
-  const prefix = add === null ? '' : unquote(add[1])
+  const prefix = add === null ? '' : unquote(add[1]!)
   if (add === null || prefix === '') return { kind: 'usage' }
-  return { kind: 'checks', action: 'add', check: { kind: add[2].toLowerCase().startsWith('test') ? 'tests' : 'build', prefix } }
+  return { kind: 'checks', action: 'add', check: { kind: add[2]!.toLowerCase().startsWith('test') ? 'tests' : 'build', prefix } }
 }
 
 function unquote(text: string): string {

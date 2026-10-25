@@ -83,7 +83,7 @@ export async function blobsAt(io: Ports, root: string, commit: string, rels: rea
   if (!r || r.exitCode !== 0 || r.isStdoutTruncated) return null
   const lines = r.stdout.split('\n').filter(l => l !== '')
   if (lines.length !== rels.length) return null
-  return new Map(rels.map((rel, i) => [rel, / blob \d+$/.test(lines[i]) ? lines[i].split(' ')[0] : null]))
+  return new Map(rels.map((rel, i) => [rel, / blob \d+$/.test(lines[i]!) ? lines[i]!.split(' ')[0]! : null]))
 }
 
 // The blob ids the working files would have (clean filters applied), from
@@ -94,7 +94,7 @@ export async function hashObjects(io: Ports, root: string, rels: readonly string
   if (!r || r.exitCode !== 0 || r.isStdoutTruncated) return null
   const lines = r.stdout.split('\n').filter(l => l !== '')
   if (lines.length !== rels.length) return null
-  return new Map(rels.map((rel, i) => [rel, lines[i].trim()]))
+  return new Map(rels.map((rel, i) => [rel, lines[i]!.trim()]))
 }
 
 // The blob id the working file would have, clean filters (autocrlf) applied.

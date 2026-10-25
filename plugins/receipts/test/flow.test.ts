@@ -1,4 +1,5 @@
 import { expect, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 
 import { nudgeText, sendBackText, stampText } from '../hooks/core/copy.ts'
 import type { Verdict } from '../hooks/core/types.ts'
@@ -418,4 +419,29 @@ test('without the setting, the same run backs nothing', async ($, on) => {
   await $.tool.call(verify)
   await answer($, 'All tests pass.')
   expect(w.stamps()).toEqual([stampText(unverified)])
+})
+
+const run = ($: Engine, args: string) => $.command.run({ command: 'receipts', args, origin: composer, presentation: {} as never })
+const UNSAVED = ' This holds for this conversation; the setting could not be saved here (change it in /config).'
+
+test('/receipts mode A where the setting has no row (a headless session): it holds for the conversation, and says so', async ($, on) => {
+  const w = world(on, { configRows: false, expectLogs: true })
+  expect((await run($, 'mode A')).text).toBe(`Receipts mode is now A.${UNSAVED}`)
+  await $.turn.start({ text: 'fix it', turnId: 't1' })
+  w.answers.push(landed, failing)
+  await $.tool.call(edit)
+  await $.tool.call(npmTest)
+  expect(await answer($, 'All tests pass.')).toBeUndefined()
+  expect(w.stamps()).toEqual([stampText(contradicted)])
+})
+
+test('/receipts off where the setting has no row: Receipts stands down for the conversation', async ($, on) => {
+  const w = world(on, { configRows: false, expectLogs: true })
+  expect((await run($, 'off')).text).toBe(`Receipts is now off.${UNSAVED}`)
+  await $.turn.start({ text: 'fix it', turnId: 't1' })
+  w.answers.push(landed, failing)
+  await $.tool.call(edit)
+  await $.tool.call(npmTest)
+  expect(await answer($, 'All tests pass.')).toBeUndefined()
+  expect(w.stamps()).toEqual([])
 })

@@ -10,7 +10,10 @@ export type ContentMeta =
 // As git decides: a NUL byte in the first 8 KB means binary.
 const SNIFF_BYTES = 8000
 
-const DECODER = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+// The mod API types give TextDecoder only a label; the runtime takes the
+// options too.
+type DecoderWithOptions = new (label: string, options: { fatal: boolean; ignoreBOM: boolean }) => TextDecoder
+const DECODER = new (TextDecoder as unknown as DecoderWithOptions)('utf-8', { fatal: true, ignoreBOM: true })
 
 // Text is valid UTF-8 with no NUL in its head; the BOM stays in `text`, so
 // writing `text` back as UTF-8 reproduces the bytes exactly. The BOM is put
@@ -43,12 +46,12 @@ export function base64FromBytes(bytes: Uint8Array): string {
     const end = Math.min(bytes.length, start + CHUNK)
     let out = ''
     for (let i = start; i < end; i += 3) {
-      const b0 = bytes[i]
-      const b1 = i + 1 < end ? bytes[i + 1] : 0
-      const b2 = i + 2 < end ? bytes[i + 2] : 0
+      const b0 = bytes[i]!
+      const b1 = i + 1 < end ? bytes[i + 1]! : 0
+      const b2 = i + 2 < end ? bytes[i + 2]! : 0
       out +=
-        ALPHABET[b0 >> 2] +
-        ALPHABET[((b0 & 3) << 4) | (b1 >> 4)] +
+        ALPHABET[b0 >> 2]! +
+        ALPHABET[((b0 & 3) << 4) | (b1 >> 4)]! +
         (i + 1 < end ? ALPHABET[((b1 & 15) << 2) | (b2 >> 6)] : '=') +
         (i + 2 < end ? ALPHABET[b2 & 63] : '=')
     }
@@ -65,10 +68,10 @@ export function bytesFromBase64(base64: string): Uint8Array {
   const out = new Uint8Array(Math.floor((clean.length * 3) / 4))
   let o = 0
   for (let i = 0; i < clean.length; i += 4) {
-    const c0 = CODES[clean.charCodeAt(i)]
-    const c1 = CODES[clean.charCodeAt(i + 1)]
-    const c2 = i + 2 < clean.length ? CODES[clean.charCodeAt(i + 2)] : 0
-    const c3 = i + 3 < clean.length ? CODES[clean.charCodeAt(i + 3)] : 0
+    const c0 = CODES[clean.charCodeAt(i)]!
+    const c1 = CODES[clean.charCodeAt(i + 1)]!
+    const c2 = i + 2 < clean.length ? CODES[clean.charCodeAt(i + 2)]! : 0
+    const c3 = i + 3 < clean.length ? CODES[clean.charCodeAt(i + 3)]! : 0
     out[o++] = (c0 << 2) | (c1 >> 4)
     if (i + 2 < clean.length) out[o++] = ((c1 & 15) << 4) | (c2 >> 2)
     if (i + 3 < clean.length) out[o++] = ((c2 & 3) << 6) | c3

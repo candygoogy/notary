@@ -45,7 +45,7 @@ export function latestQualifyingRun(l: Ledger, kind: ClaimKind, isOutOfScope: (e
   const lastEdit = lastEditSeq(l.entries)
   let testPass: Evidence | null = null
   for (let i = l.entries.length - 1; i >= 0; i--) {
-    const entry = l.entries[i]
+    const entry = l.entries[i]!
     if (entry.seq <= lastEdit) break
     if (entry.kind !== 'run') continue
     const { strength, outcome } = entry.evidence
@@ -73,7 +73,7 @@ function passedBefore(entries: readonly LedgerEntry[], index: number, lastEdit: 
 }
 
 function lastEditSeq(entries: readonly LedgerEntry[]): number {
-  for (let i = entries.length - 1; i >= 0; i--) if (entries[i].kind === 'edit') return entries[i].seq
+  for (let i = entries.length - 1; i >= 0; i--) if (entries[i]!.kind === 'edit') return entries[i]!.seq
   return -1
 }
 

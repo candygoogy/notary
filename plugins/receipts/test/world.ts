@@ -9,10 +9,11 @@ import type { On } from 'claude-code'
 export type Answer = { result: unknown; text?: string; isError?: true } | { deny: string }
 
 // `aliases` stands for the file system's own names: a key prefix the real path
-// spells as its value (an 8.3 short name and its long name).
+// spells as its value (an 8.3 short name and its long name). `configRows: false`
+// stands for a headless session: no plugin rows in /config.
 export function world(
   on: On,
-  { expectLogs = false, stopResult = {} as Record<string, unknown>, cwd = 'C:/work', aliases = {} as Record<string, string> } = {},
+  { expectLogs = false, stopResult = {} as Record<string, unknown>, cwd = 'C:/work', aliases = {} as Record<string, string>, configRows = true } = {},
 ) {
   const answers: Answer[] = []
   const logs: string[] = []
@@ -34,6 +35,11 @@ export function world(
   on('classic.Stop', () => stopResult as never)
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('prompt.submit', (_$, e) => ({ text: e.text, context: e.context }))
+  if (!configRows) {
+    on('config.set', (_$, e) => {
+      throw new Error(`$.config.set: no /config row with key ${e.key}`)
+    })
+  }
   on('state.set', (_$, e, next) => {
     writes.push({ key: e.key, value: e.value })
     return next(e)

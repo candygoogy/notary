@@ -302,7 +302,8 @@ test('/receipts check add, list and remove write the checks setting', { options:
   expect((await run($, 'check add "pnpm verify" tests')).text).toBe('Receipts now counts pnpm verify as a test check.')
   expect(s.settings).toEqual([{ key: 'receipts.checks', value: ['build: make ci', 'tests: pnpm verify'] }])
   expect((await run($, 'check remove make ci')).text).toBe('Receipts no longer counts make ci as a check.')
-  expect(s.settings.at(-1)).toEqual({ key: 'receipts.checks', value: [] })
+  // The remove sees the add before it: the change holds for the conversation.
+  expect(s.settings.at(-1)).toEqual({ key: 'receipts.checks', value: ['tests: pnpm verify'] })
   expect((await run($, 'check remove nope')).text).toBe('No check named nope.')
   expect((await run($, 'check add pnpm verify')).text).toBe(USAGE)
 })

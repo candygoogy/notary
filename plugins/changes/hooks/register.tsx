@@ -1,4 +1,4 @@
-import type { EngineInterface as Engine, Hook, Register, Timer } from 'claude-code'
+import type { EngineInterface as Engine, Hook, MatchedHook, Register, Timer } from 'claude-code'
 import { update } from 'claude-code'
 
 import { emptyIndex, statusKey, type Content, type Index } from './core/model.ts'
@@ -22,6 +22,7 @@ import {
   timeline,
   turnFiles,
   type FileChange,
+  type TimelineRow,
 } from './core/timeline.ts'
 import { capture, keyOf, storeDirOf, type StoreBudget } from './io/blobs.ts'
 import { diffOf, type DiffView } from './io/diffs.ts'
@@ -78,7 +79,10 @@ type Session = {
   writer: boolean
   launchedAt: number
 }
-type Render = Parameters<Hook<'ui.render'>>
+// Typed by the filters the hooks are registered with: `next` is narrowed to them.
+type BandRender = Parameters<MatchedHook<'ui.render', { component: 'AbovePrompt' }>>
+type PaneRender = Parameters<MatchedHook<'ui.render', { component: 'Pane'; requestId: 'changes' }>>
+type TurnRow = Extract<TimelineRow, { kind: 'turn' }>
 
 // Per module copy, rebuilt after a hot reload: the turn sweep's baseline (a
 // lost one skips that turn's sweep), large-file snapshots by mtime, the last
@@ -762,7 +766,7 @@ function noteLayout(viewport: { columns: number; isFullscreen?: boolean } | unde
   if (viewport !== undefined) layout = { columns: viewport.columns, ...(viewport.isFullscreen !== undefined ? { isFullscreen: viewport.isFullscreen } : {}) }
 }
 
-async function renderBand($: Engine, opts: Options, e: Render[1], next: Render[2]) {
+async function renderBand($: Engine, opts: Options, e: BandRender[1], next: BandRender[2]) {
   noteLayout(e.viewport)
   if (!opts.band || e.component !== 'AbovePrompt' || e.props.hasSurvey) return next(e)
   const { value: band = null } = await $.state.get(BAND)
@@ -815,7 +819,7 @@ async function paneIsUp($: Engine): Promise<boolean> {
   }
 }
 
-async function renderPane($: Engine, opts: Options, e: Render[1], next: Render[2]) {
+async function renderPane($: Engine, opts: Options, e: PaneRender[1], next: PaneRender[2]) {
   if (e.component !== 'Pane' || e.requestId !== PANE.id) return next(e)
   const { value: stored = emptyIndex() } = await $.state.get(INDEX)
   const { value: session = null } = await $.state.get(SESSION)
@@ -824,7 +828,8 @@ async function renderPane($: Engine, opts: Options, e: Render[1], next: Render[2
   const { value: storeFull = false } = await $.state.get(STORE_FULL)
   const index = stored as Index
   const rows = timeline(index)
-  const selected = view.turnId ?? rows.find(r => r.kind === 'turn' && r.files.length > 0)?.turn.turnId ?? null
+  const firstWithFiles = rows.find((r): r is TurnRow => r.kind === 'turn' && r.files.length > 0)
+  const selected = view.turnId ?? firstWithFiles?.turn.turnId ?? null
   const files = selected === null ? [] : turnFiles(index, selected, view.node ?? undefined)
   // A draw only reads diffs already computed: the rest show as loading, and
   // one fetch runs off the draw, then draws again.
@@ -1184,7 +1189,7 @@ function isOlder(version: string, min: readonly number[]): boolean {
   for (let i = 0; i < min.length; i++) {
     const part = parts[i] ?? 0
     if (Number.isNaN(part)) return false
-    if (part !== min[i]) return part < min[i]
+    if (part !== min[i]) return part < min[i]!
   }
   return false
 }

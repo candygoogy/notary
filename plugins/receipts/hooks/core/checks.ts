@@ -22,7 +22,7 @@ export function parseChecks(value: unknown): { checks: DeclaredCheck[]; invalid:
         invalid.push(entry)
         continue
       }
-      checks.push({ kind: match[1].toLowerCase().startsWith('test') ? 'tests' : 'build', prefix: match[2].trim() })
+      checks.push({ kind: match[1]!.toLowerCase().startsWith('test') ? 'tests' : 'build', prefix: match[2]!.trim() })
     }
   }
   return { checks, invalid }

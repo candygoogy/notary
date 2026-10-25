@@ -34,9 +34,9 @@ export function parseStatus(output: string): Map<string, StatusEntry> {
   const fields = output.split(NUL)
   const entries = new Map<string, StatusEntry>()
   for (let i = 0; i < fields.length; i++) {
-    const field = fields[i]
+    const field = fields[i]!
     if (field.length < 4) continue
-    const entry: StatusEntry = { path: field.slice(3), x: field[0], y: field[1] }
+    const entry: StatusEntry = { path: field.slice(3), x: field[0]!, y: field[1]! }
     if (entry.x === 'R' || entry.x === 'C' || entry.y === 'R' || entry.y === 'C') entry.origPath = fields[++i]
     entries.set(entry.path, entry)
   }

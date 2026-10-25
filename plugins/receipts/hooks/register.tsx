@@ -1,4 +1,4 @@
-import type { EngineInterface as Engine, Hook, Register } from 'claude-code'
+import type { EngineInterface as Engine, MatchedHook, Register } from 'claude-code'
 import { update } from 'claude-code'
 
 import { parseChecks } from './core/checks.ts'
@@ -38,10 +38,14 @@ const PENDING_NUDGE = { plugin: 'receipts', key: 'pendingNudge' } as const
 const REMINDED = { plugin: 'receipts', key: 'reminded' } as const
 const INACTIVE = { plugin: 'receipts', key: 'inactive' } as const
 const STAMPED = { plugin: 'receipts', key: 'stamped' } as const
+// `/receipts` changes, for this conversation: over the settings, which can't always be saved.
+const OVERRIDES = { plugin: 'receipts', key: 'overrides' } as const
 
 const PANE = { id: 'receipts', title: 'Receipts' } as const
 
 type Options = { mode: Mode; stamp: boolean; enabled: boolean; smartCheck: boolean; verbosity: Verbosity; checks: DeclaredCheck[] }
+// What `/receipts` changes; the stamp is set in /config only.
+type Overrides = Partial<Omit<Options, 'stamp'>>
 
 export const register: Register = (on, options) => {
   const opts: Options = {
@@ -63,7 +67,7 @@ export const register: Register = (on, options) => {
     } catch (error) {
       debug($, 'session.start', error)
     }
-    if (!opts.enabled) return r
+    if (!(await optionsOf($, opts)).enabled) return r
     if (declared.invalid.length > 0) {
       $.ui.toast(`Receipts ignored ${declared.invalid.length === 1 ? 'a check' : 'checks'} not written as "tests: <command>" or "build: <command>": ${declared.invalid.join('; ')}`)
     }
@@ -81,7 +85,7 @@ export const register: Register = (on, options) => {
 
   on('turn.start', async ($, e, next) => {
     const r = await next(e)
-    if (!(await isActive($, opts))) return r
+    if ((await activeOptions($, opts)) === null) return r
     try {
       const { value: ledger = emptyLedger() } = await $.state.get(LEDGER)
       await $.state.set(CURRENT_TURN, { turnId: e.turnId, startSeq: ledger.nextSeq })
@@ -93,9 +97,10 @@ export const register: Register = (on, options) => {
 
   on('tool.call', async ($, e, next) => {
     const r = await next(e)
-    if (!(await isActive($, opts))) return r
+    const active = await activeOptions($, opts)
+    if (active === null) return r
     try {
-      await record($, e, r, opts.checks)
+      await record($, e, r, active.checks)
     } catch (error) {
       debug($, 'tool.call', error)
     }
@@ -107,7 +112,8 @@ export const register: Register = (on, options) => {
   // gets the stamp here, inside the turn: a row appended from turn.complete,
   // after the turn, is not kept in a headless (-p) session's transcript.
   on('classic.Stop', async ($, e, next) => {
-    if (!(await isActive($, opts))) return next(e)
+    const active = await activeOptions($, opts)
+    if (active === null) return next(e)
     let verdict: Verdict | null = null
     let shown: Visibility | null = null
     let sendBack: string | null = null
@@ -116,11 +122,11 @@ export const register: Register = (on, options) => {
       const turn = (await $.state.get(CURRENT_TURN)).value ?? null
       turnId = turn?.turnId ?? ''
       const startSeq = turn?.startSeq ?? 0
-      verdict = await judgeOnce($, opts, turnId, startSeq, e.last_assistant_message ?? '')
+      verdict = await judgeOnce($, active, turnId, startSeq, e.last_assistant_message ?? '')
       if (verdict !== null) {
-        shown = await shownFor($, opts, verdict, startSeq)
+        shown = await shownFor($, active, verdict, startSeq)
         const { value: sent = [] } = await $.state.get(SENT_BACK)
-        if (shown.sendBackEligible) sendBack = decide(verdict, opts.mode, sent.includes(turnId), e.stop_hook_active).sendBack
+        if (shown.sendBackEligible) sendBack = decide(verdict, active.mode, sent.includes(turnId), e.stop_hook_active).sendBack
       }
     } catch (error) {
       debug($, 'classic.Stop', error)
@@ -133,7 +139,7 @@ export const register: Register = (on, options) => {
       await update($, SENT_BACK, (sent = []) => [...sent, turnId].slice(-SENT_BACK_LIMIT))
       return { ...r, block: sendBack }
     }
-    if (verdict !== null && shown?.stamp === true && opts.stamp) {
+    if (verdict !== null && shown?.stamp === true && active.stamp) {
       try {
         await stampOnce($, `${turnId}:${hashText(e.last_assistant_message ?? '')}`, stampText(verdict))
       } catch (error) {
@@ -145,12 +151,14 @@ export const register: Register = (on, options) => {
 
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (e.agentId !== undefined || !(await isActive($, opts))) return r
+    if (e.agentId !== undefined) return r
+    const active = await activeOptions($, opts)
+    if (active === null) return r
     try {
       // The turn of a prompt that carried the reminder ends, answered or not.
       const { value: reminded = false } = await $.state.get(REMINDED)
       if (reminded) await $.state.set(REMINDED, false)
-      const judged = e.reason === 'answer' ? await settle($, opts, e.turnId, e.answer) : false
+      const judged = e.reason === 'answer' ? await settle($, active, e.turnId, e.answer) : false
       const { value: last = null } = await $.state.get(LAST)
       if (last !== null && !bandStays(last.kind, { at: 'turn-end', reminded, judged })) await $.state.set(LAST, null)
     } catch (error) {
@@ -161,7 +169,7 @@ export const register: Register = (on, options) => {
 
   on('prompt.submit', async ($, e, next) => {
     if (!NUDGE_ORIGINS.includes(e.origin.kind)) return next(e)
-    if (!(await isActive($, opts))) {
+    if ((await activeOptions($, opts)) === null) {
       try {
         await clearStale($)
       } catch (error) {
@@ -195,9 +203,12 @@ export const register: Register = (on, options) => {
   // Review 7: a new conversation (/clear, or the session's end) starts clean.
   on('session.end', async ($, e, next) => {
     const r = await next(e)
-    if (!opts.enabled) return r
+    const { enabled } = await optionsOf($, opts)
     try {
-      await resetConversation($)
+      if (enabled) await resetConversation($)
+      // A /receipts change holds for the conversation that made it, on or off.
+      const { value: overrides = null } = await $.state.get(OVERRIDES)
+      if (overrides !== null) await $.state.set(OVERRIDES, null)
     } catch (error) {
       debug($, 'session.end', error)
     }
@@ -206,9 +217,9 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'receipts' }, ($, e) => runCommand($, opts, e.args))
 
-  on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => (opts.enabled ? renderBand($, e, next) : next(e)))
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => ((await optionsOf($, opts)).enabled ? renderBand($, e, next) : next(e)))
 
-  on('ui.render', { component: 'Pane', requestId: 'receipts' }, ($, e, next) => (opts.enabled ? renderPane($, e, next) : next(e)))
+  on('ui.render', { component: 'Pane', requestId: 'receipts' }, async ($, e, next) => ((await optionsOf($, opts)).enabled ? renderPane($, e, next) : next(e)))
 
   // The band's [Details] shows only while the pane is shut: closing it (the
   // person's close mark or key) draws the band again.
@@ -219,31 +230,53 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 }
 
-type Render = Parameters<Hook<'ui.render'>>
+// Typed by the filters the hooks are registered with: `next` is narrowed to them.
+type BandRender = Parameters<MatchedHook<'ui.render', { component: 'AbovePrompt' }>>
+type PaneRender = Parameters<MatchedHook<'ui.render', { component: 'Pane'; requestId: 'receipts' }>>
 
-// `/receipts` opens the pane; its subcommands write the plugin's settings.
+// `/receipts` opens the pane; its subcommands change the plugin's settings.
+// A change holds for this conversation at once, and is saved as the setting
+// where the session has the row (a headless session has no plugin rows).
 async function runCommand($: Engine, opts: Options, args: string): Promise<{ text: string }> {
   const plan = parseCommand(args)
   if (plan.kind === 'usage') return { text: USAGE }
-  if (plan.kind === 'checks') {
-    const edit = editChecks(opts.checks, plan)
-    if (edit.value === undefined) return { text: edit.text }
-    const written = await $.config.set({ key: 'receipts.checks', value: edit.value })
-    return 'deny' in written && written.deny !== undefined ? { text: `Receipts could not change its checks: ${written.deny}` } : { text: edit.text }
-  }
   if (plan.kind === 'open') {
     // The command's own answer says when the pane waits undrawn, and why.
     return { text: (await openPane($)) ?? 'Receipts pane opened.' }
   }
-  const result = await $.config.set({ key: plan.key, value: plan.value })
-  return 'deny' in result && result.deny !== undefined ? { text: `Receipts could not change ${plan.key}: ${result.deny}` } : { text: plan.done }
+  if (plan.kind === 'checks') {
+    const edit = editChecks((await optionsOf($, opts)).checks, plan)
+    if (edit.value === undefined) return { text: edit.text }
+    await override($, { checks: parseChecks(edit.value).checks })
+    return { text: edit.text + (await saveSetting($, 'receipts.checks', edit.value)) }
+  }
+  await override($, { [plan.key.slice('receipts.'.length)]: plan.value } as Overrides)
+  return { text: plan.done + (await saveSetting($, plan.key, plan.value)) }
+}
+
+async function override($: Engine, change: Overrides): Promise<void> {
+  await update($, OVERRIDES, (overrides = null) => ({ ...overrides, ...change }))
+  $.ui.invalidate('ui.render')
+}
+
+// Best effort: what to add to the command's answer when the setting was not
+// saved (no row for it, or a hook refused). Never throws.
+async function saveSetting($: Engine, key: string, value: string | boolean | string[]): Promise<string> {
+  const unsaved = ' This holds for this conversation; the setting could not be saved here (change it in /config).'
+  try {
+    const result = await $.config.set({ key, value })
+    return 'deny' in result && result.deny !== undefined ? unsaved : ''
+  } catch (error) {
+    debug($, 'command', error)
+    return unsaved
+  }
 }
 
 // The band, for as long as bandStays (core/visibility.ts) keeps it, or [Dismiss].
 // It shares the space above the prompt: Receipts' row goes first and whatever
 // is beneath (another mod's band, the engine's own) is drawn under it, so
 // neither hides the other. With room for one row only, Receipts' row stands.
-async function renderBand($: Engine, e: Render[1], next: Render[2]) {
+async function renderBand($: Engine, e: BandRender[1], next: BandRender[2]) {
   if (e.component !== 'AbovePrompt' || e.props.hasSurvey) return next(e)
   const { value: last = null } = await $.state.get(LAST)
   const { value: hidden = false } = await $.state.get(BAND_HIDDEN)
@@ -292,16 +325,24 @@ async function paneIsUp($: Engine): Promise<boolean> {
   }
 }
 
-async function renderPane($: Engine, e: Render[1], next: Render[2]) {
+async function renderPane($: Engine, e: PaneRender[1], next: PaneRender[2]) {
   if (e.component !== 'Pane' || e.requestId !== PANE.id) return next(e)
   const { value: history = [] } = await $.state.get(HISTORY)
   return paneView($.ui.resolve(e), history, await $.clock.now())
 }
 
-async function isActive($: Engine, opts: Options): Promise<boolean> {
-  if (!opts.enabled) return false
+// The options as this conversation has them: its /receipts changes over the settings.
+async function optionsOf($: Engine, opts: Options): Promise<Options> {
+  const { value: overrides = null } = await $.state.get(OVERRIDES)
+  return overrides === null ? opts : { ...opts, ...overrides }
+}
+
+// Those options while Receipts is on and active this session, else null.
+async function activeOptions($: Engine, opts: Options): Promise<Options | null> {
+  const current = await optionsOf($, opts)
+  if (!current.enabled) return null
   const { value: inactive = false } = await $.state.get(INACTIVE)
-  return !inactive
+  return inactive ? null : current
 }
 
 // Records a finished tool call in the ledger: an edit that landed, or a shell run.
@@ -405,7 +446,7 @@ function isOlder(version: string, min: readonly number[]): boolean {
   for (let i = 0; i < min.length; i++) {
     const part = parts[i] ?? 0
     if (Number.isNaN(part)) return false
-    if (part !== min[i]) return part < min[i]
+    if (part !== min[i]) return part < min[i]!
   }
   return false
 }
