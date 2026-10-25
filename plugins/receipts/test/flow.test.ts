@@ -478,7 +478,8 @@ for (const order of ['prepend', 'append'] as const) {
     await $.tool.call(sed)
     // Recorded as Changes' write landed, before any answer.
     const ledger = w.writes.filter(write => write.key === 'ledger').at(-1)?.value as { entries: Array<{ kind: string; path?: string }> }
-    expect(ledger.entries.filter(entry => entry.kind === 'edit')).toEqual([expect.objectContaining({ path: 'C:/work/src/a.ts' })])
+    // By its end: off Windows the engine resolves a `C:/` path as relative.
+    expect(ledger.entries.filter(entry => entry.kind === 'edit')).toEqual([expect.objectContaining({ path: expect.stringMatching(/C:\/work\/src\/a\.ts$/) })])
     expect(await answer($, 'All tests pass.')).toBeUndefined()
     expect(w.stamps()).toEqual([stampText(unverified)])
   })
