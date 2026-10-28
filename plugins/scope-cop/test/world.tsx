@@ -112,6 +112,9 @@ export async function paneShows($: Engine): Promise<string> {
 export const editOf =(path: string, agentId?: string) => ({ tool: 'Edit', file_path: path, old_string: 'a', new_string: 'b', ...(agentId === undefined ? {} : { agentId }) })
 export const checkOf = (path: string) => ({ tool: 'Edit', input: { file_path: path, old_string: 'a', new_string: 'b' } })
 export const shellCheck = (command: string, tool: 'Bash' | 'PowerShell' = 'Bash') => ({ tool, input: { command } })
+export const shellCall = (command: string, tool: 'Bash' | 'PowerShell' = 'Bash') => ({ tool, command })
+// The refusal a tool.call result carries, if any.
+export const refusalOf = (r: unknown) => (r as { deny?: string }).deny
 
 // An index as Changes keeps it: only the fields Scope Cop reads.
 export const shellEdit = (seq: number, path: string, via = 'shell') => ({ seq, turnId: 't1', toolUseId: `u${seq}`, tool: via === 'shell' ? 'Bash' : 'unknown', via, path, key: path.toLowerCase() })

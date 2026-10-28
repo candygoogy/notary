@@ -1,6 +1,6 @@
 {
   "name": "scope-cop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Claude stays inside the scope you set, and asks before leaving it. Edits outside it are flagged, or blocked if you want.",
   "author": { "name": "Notary contributors" },
   "license": "MIT",

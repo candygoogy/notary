@@ -91,34 +91,30 @@ export const register: Register = (on, options) => {
     return r
   })
 
-  // The guard: a file tool, or (mode C) a shell command with a literal target,
-  // outside the scope is denied before it runs. Tighten only, fail open.
-  on('tool.check', async ($, e, next) => {
+  // Each tool call. Before it runs, mode C refuses a file tool, or a shell
+  // command with a literal absolute target, outside the scope: the call never
+  // runs and Claude reads why. After it runs, an edit outside the scope that
+  // landed is flagged, and in mode B Claude is told on the call's own result,
+  // once per file per turn; a file the last answer named is approved instead,
+  // in the pane only. Scope Cop never approves a call, and a failure passes it on.
+  on('tool.call', async ($, e, next) => {
     const tool = e.tool
-    const input = e.input
-    const agentId = e.agentId
+    const call = e as unknown as { file_path?: string; notebook_path?: string; command?: string; agentId?: string }
+    const target = { file_path: call.file_path, notebook_path: call.notebook_path, command: call.command }
     let refusal: string | null = null
     try {
-      refusal = await denial($, opts, tool, input, agentId)
+      refusal = await denial($, opts, tool, target, call.agentId)
     } catch (error) {
-      debug($, 'tool.check', error)
+      debug($, 'tool.call guard', error)
     }
-    if (refusal !== null) return { decision: 'deny', reason: refusal }
-    return next(e)
-  })
-
-  // An edit outside the scope that landed: flagged, and in mode B Claude is
-  // told on the call's own result, once per file per turn. A file the last
-  // answer named is approved instead: in the pane only.
-  on('tool.call', async ($, e, next) => {
+    if (refusal !== null) return { deny: refusal }
     const r = await next(e)
-    if (!EDIT_TOOLS.includes(e.tool)) return r
+    if (!EDIT_TOOLS.includes(tool)) return r
     if (('deny' in r && r.deny !== undefined) || r.isError === true) return r
     if ((r.result as { staged?: boolean } | undefined)?.staged === true) return r
     try {
       const active = await activeScope($, opts)
       if (active === null) return r
-      const call = e as unknown as { file_path?: string; notebook_path?: string; agentId?: string }
       const path = await absolute($, active.session, String(call.file_path ?? call.notebook_path ?? ''))
       if (path === '') return r
       const where = classify(path, ctxOf(active.session), active.compiled)

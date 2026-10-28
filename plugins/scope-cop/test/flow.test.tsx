@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { answer, bandShows, checkOf, editOf, paneShows, prompt, scope, shellCheck, shellEdit, start, world } from './world.tsx'
+import { answer, bandShows, checkOf, editOf, paneShows, prompt, refusalOf, scope, shellCall, shellEdit, start, world } from './world.tsx'
 
 const OUT = 'C:/work/src/db/pool.ts'
 const IN = 'C:/work/src/auth/login.ts'
@@ -54,7 +54,7 @@ test('/scope mode holds at once for the conversation and writes no setting; a ty
     'Scope Cop mode C: edits outside the scope are blocked, and Claude is told why. This holds for this conversation; to keep it, change it in /config.',
   )
   expect(w.settings).toEqual([])
-  expect((await $.tool.check(checkOf(OUT))).decision).toBe('deny')
+  expect(refusalOf(await $.tool.call(editOf(OUT)))).toBeDefined()
   expect(await scope($, 'mode X')).toContain('Usage: /scope')
 })
 
@@ -123,17 +123,16 @@ test('A: an edit outside the scope is flagged only: no deny, no note to Claude',
 
 // ------------------------------------------------------------ mode C
 
-test('C: an edit outside the scope is denied with the reason Claude reads; inside keeps the verdict beneath', { options: { mode: 'C' } }, async ($, on) => {
+test('C: an edit outside the scope is refused with the reason Claude reads; inside it runs, and the permission check is left alone', { options: { mode: 'C' } }, async ($, on) => {
   const w = world(on)
   await start($)
   await scope($, 'src/auth/**')
-  const denied = await $.tool.check(checkOf(OUT))
-  expect(denied.decision).toBe('deny')
-  expect(denied.reason).toBe(
+  expect(refusalOf(await $.tool.call(editOf(OUT)))).toBe(
     'Scope Cop (a mod the user installed): src/db/pool.ts is outside the scope the user set for this task (src/auth/**). The edit was not made. Ask the user before editing outside the scope; they can widen it with /scope add.',
   )
+  expect(refusalOf(await $.tool.call(editOf(IN)))).toBeUndefined()
   w.verdicts.push({ decision: 'ask' })
-  expect(await $.tool.check(checkOf(IN))).toEqual({ decision: 'ask' })
+  expect(await $.tool.check(checkOf(OUT))).toEqual({ decision: 'ask' })
 })
 
 test('C: Scope Cop only tightens: a deny beneath stays a deny, never an allow', { options: { mode: 'C' } }, async ($, on) => {
@@ -148,30 +147,28 @@ test('C: a shell command with an absolute target outside the scope is denied; a 
   world(on)
   await start($)
   await scope($, 'src/auth/**')
-  expect((await $.tool.check(shellCheck('echo x > C:/work/src/db/a.ts'))).decision).toBe('deny')
-  expect((await $.tool.check(shellCheck("Set-Content -Path C:\\work\\src\\db\\a.ts -Value 'x'", 'PowerShell'))).decision).toBe('deny')
-  expect(await $.tool.check(shellCheck('echo x > src/db/a.ts'))).toEqual({ decision: 'allow' })
-  expect(await $.tool.check(shellCheck('echo x > C:/work/src/auth/a.ts'))).toEqual({ decision: 'allow' })
-  expect(await $.tool.check(shellCheck('npm test'))).toEqual({ decision: 'allow' })
+  expect(refusalOf(await $.tool.call(shellCall('echo x > C:/work/src/db/a.ts')))).toBeDefined()
+  expect(refusalOf(await $.tool.call(shellCall("Set-Content -Path C:\\work\\src\\db\\a.ts -Value 'x'", 'PowerShell')))).toBeDefined()
+  expect(refusalOf(await $.tool.call(shellCall('echo x > src/db/a.ts')))).toBeUndefined()
+  expect(refusalOf(await $.tool.call(shellCall('echo x > C:/work/src/auth/a.ts')))).toBeUndefined()
+  expect(refusalOf(await $.tool.call(shellCall('npm test')))).toBeUndefined()
 })
 
 test('C: a file in a bookkeeping folder is not denied; a .env there, or a source folder, still is', { options: { mode: 'C' } }, async ($, on) => {
   world(on)
   await start($)
   await scope($, 'src/auth/**')
-  expect(await $.tool.check(checkOf('C:/work/shots/after-login.png'))).toEqual({ decision: 'allow' })
-  expect(await $.tool.check(checkOf('C:/work/web/.cache/build.json'))).toEqual({ decision: 'allow' })
-  const secret = await $.tool.check(checkOf('C:/work/shots/.env'))
-  expect(secret.decision).toBe('deny')
-  expect(secret.reason).toContain('shots/.env is outside the scope')
-  expect((await $.tool.check(checkOf('C:/work/blender/x.blend.py'))).decision).toBe('deny')
+  expect(refusalOf(await $.tool.call(editOf('C:/work/shots/after-login.png')))).toBeUndefined()
+  expect(refusalOf(await $.tool.call(editOf('C:/work/web/.cache/build.json')))).toBeUndefined()
+  expect(refusalOf(await $.tool.call(editOf('C:/work/shots/.env')))).toContain('shots/.env is outside the scope')
+  expect(refusalOf(await $.tool.call(editOf('C:/work/blender/x.blend.py')))).toBeDefined()
 })
 
 test('B: shell commands are never denied before they run', async ($, on) => {
   world(on)
   await start($)
   await scope($, 'src/auth/**')
-  expect(await $.tool.check(shellCheck('echo x > C:/work/src/db/a.ts'))).toEqual({ decision: 'allow' })
+  expect(refusalOf(await $.tool.call(shellCall('echo x > C:/work/src/db/a.ts')))).toBeUndefined()
 })
 
 // ------------------------------------------------------------ shell writes, via Changes

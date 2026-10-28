@@ -53,7 +53,7 @@ What Claude is told states facts and names the mod: *"Scope Cop (a mod the user 
 
 Scope Cop only tightens. It never turns a refusal from your settings, another hook or the permission mode into an allow, and if Scope Cop itself fails, the edit goes ahead as if it weren't installed.
 
-**The permission check.** Scope Cop's permission hook runs before each `Edit`, `Write`, `NotebookEdit`, `Bash` and `PowerShell` call while a scope is set. In mode C it refuses an edit whose file is outside the scope, and a shell command whose literal absolute write target is; every other call, and every call in modes A and B, it passes on unchanged to your settings and other hooks.
+**How mode C refuses.** Scope Cop sees each tool call before it runs. In mode C it refuses an `Edit`, `Write` or `NotebookEdit` whose file is outside the scope, and a `Bash` or `PowerShell` command whose literal absolute write target is: the call doesn't run, and Claude reads why. Scope Cop never approves a call and doesn't answer Claude Code's permission check, so your permission rules and prompts work as they do without it.
 
 Subagents are covered: their edits go through the same checks.
 
