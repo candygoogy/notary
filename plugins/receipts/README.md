@@ -170,6 +170,18 @@ Pester only sets an exit code with `-CI`, so its summary is always read.
 - **Send back** stops Claude from ending the turn and gives it the reason, for example: `Receipts: you claimed "All tests pass.", but npm test exited 1 (1 failed). Fix it and verify before claiming success.` It happens at most once per turn, and never while Claude is already continuing because of a stop hook. If another hook sends Claude back at the same moment, its reason is used and Receipts adds none.
 - **Nudge** (mode B, ⚠️) attaches a short note to your next prompt that only Claude sees: `Receipts: your previous claim '…' was not verified by any check run after your last edit. Verify before claiming success.` It is attached only to prompts you type (terminal, Remote Control, or `claude -p`), never to prompts another plugin sends.
 
+## Privacy
+
+Receipts runs on your machine. It makes no network requests and collects no telemetry.
+
+**What it reads.** The tool calls of the conversation and their output, and Claude's final answers, through Claude Code's hooks. With [Changes](../changes/README.md) installed, it also reads Changes' record of the files shell commands changed.
+
+**What it keeps.** A short record of the conversation's edits and test runs, and the last verdicts, in Claude Code's plugin state. Nothing is written elsewhere.
+
+**What reaches Claude.** A nudge or a send-back is text Receipts adds to the conversation, so Claude reads it like the rest of the conversation.
+
+**Smart check** (off unless you turn it on): for a sentence the phrase rules can't settle, Receipts asks a small model (Haiku) whether it claims success. Only that sentence is sent, through your own Claude Code session, and it counts toward your usage. With smart check off, Receipts makes no model calls.
+
 ## Limits
 
 - **English only.** Claims in other languages are not judged.

@@ -79,6 +79,16 @@ A mod sees a shell command's text before it runs, and nothing about what the pro
 | Mode | `/scope mode A`, `B` or `C` (holds at once for the conversation, and is saved as the setting when the session has its `/config` row) | B |
 | On or off | `/config` | on |
 
+## Privacy
+
+Scope Cop runs on your machine. It makes no network requests, collects no telemetry, and makes no model calls.
+
+**What it reads.** The path each `Edit`, `Write` and `NotebookEdit` targets, the text of shell commands (to spot literal write targets), Claude's final answers (for the files it named before you said yes), and, with [Changes](../changes/README.md) installed, Changes' record of the files shell commands changed.
+
+**What it keeps.** The scope, the mode and the list of edits outside the scope, in Claude Code's plugin state for the conversation. Nothing is written elsewhere.
+
+**What reaches Claude.** The line with the scope that rides on each prompt, and in modes B and C the note about an edit outside the scope, are text Scope Cop adds to the conversation, so Claude reads them like the rest of it.
+
 ## Limits
 
 - **It costs a round trip when the task needs a file outside the scope.** Claude stops at the edge and names the file; you say yes. In our eval (16 focused tasks, Sonnet), 9 of 32 scoped runs stopped this way; one yes was enough in all but one.
