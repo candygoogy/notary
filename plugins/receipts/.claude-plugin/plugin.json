@@ -6,6 +6,7 @@
   "license": "MIT",
   "homepage": "https://github.com/candygoogy/notary/tree/main/plugins/receipts",
   "repository": "https://github.com/candygoogy/notary",
+  "privacyPolicyUrl": "https://github.com/candygoogy/notary/tree/main/plugins/receipts#privacy",
   "keywords": ["claude-code-mod", "verification", "notary"],
   "types": "./types/index.d.ts",
   "userConfig": {

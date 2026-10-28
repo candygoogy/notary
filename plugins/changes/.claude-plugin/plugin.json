@@ -6,6 +6,7 @@
   "license": "MIT",
   "homepage": "https://github.com/candygoogy/notary/tree/main/plugins/changes",
   "repository": "https://github.com/candygoogy/notary",
+  "privacyPolicyUrl": "https://github.com/candygoogy/notary/tree/main/plugins/changes#privacy",
   "keywords": ["claude-code-mod", "diff", "revert", "notary"],
   "types": "./types/index.d.ts",
   "userConfig": {

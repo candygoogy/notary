@@ -6,6 +6,7 @@
   "license": "MIT",
   "homepage": "https://github.com/candygoogy/notary/tree/main/plugins/scope-cop",
   "repository": "https://github.com/candygoogy/notary",
+  "privacyPolicyUrl": "https://github.com/candygoogy/notary/tree/main/plugins/scope-cop#privacy",
   "keywords": ["claude-code-mod", "scope", "guardrails", "notary"],
   "types": "./types/index.d.ts",
   "userConfig": {
