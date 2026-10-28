@@ -29,7 +29,7 @@ export function describe(bytes: Uint8Array, decoder: TextDecoder = DECODER): Con
     return { kind: 'binary', size }
   }
   const bom = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
-  if (bom && !text.startsWith('﻿')) text = '﻿' + text
+  if (bom && !text.startsWith('\uFEFF')) text = '\uFEFF' + text
   return { kind: 'text', text, size, eol: eolOf(text), bom }
 }
 

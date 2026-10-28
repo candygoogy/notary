@@ -129,6 +129,16 @@ Claude Code's built-in `/diff` shows the working tree's git diff. Changes is per
 
 Changes runs entirely on your machine. It makes no network requests, collects no telemetry, and makes no model calls. Nothing it keeps leaves your machine.
 
+**What it runs.** Only local programs, never one that uses the network:
+
+- `git`, inside a git repository only: `rev-parse`, `status`, `diff --name-only`, `hash-object` and `cat-file`, to see which files a shell command changed and to read a file as it was at the last commit; and `restore --source=<commit> --worktree -- <file>` when a revert puts back a file whose earlier version is in git.
+- To put a reverted file in place in one step: `mv` and `rm` (and `sh` with `base64` or `openssl` to write a binary file's bytes) on macOS and Linux, and `powershell` with `[IO.File]` calls and `Remove-Item` on Windows.
+- To delete its own old copies under `~/.claude/plugin-data/notary-changes/`: `find` and `rm` through `sh`, or `Remove-Item` through `powershell`.
+
+**What it writes in your project.** Only the file you revert, when you select **Revert** or run a revert from the pane. It can be any file Claude changed, including build, settings or instruction files such as `package.json`, `.claude/settings.json` or `CLAUDE.md`. Changes never writes to your project on its own.
+
+**What reaches Claude.** After a revert, Changes adds a hidden note to the conversation naming the reverted files, so Claude re-reads them instead of editing from memory. The `tellClaude` setting turns it off.
+
 **What it keeps, and where.** A copy of each file Claude changed, from before and after each change, and the conversation's history of those changes, in `~/.claude/plugin-data/notary-changes/<conversation>/` (under `CLAUDE_CONFIG_DIR` if you set it). The copies are of whatever Claude changed, so they can include secrets, such as a `.env` file Claude edited.
 
 **For how long.** 7 days after you last used the conversation, so that a resumed conversation (`claude --resume`, `--continue`, `/resume`) can still show and revert its changes. Older ones are deleted the next time Changes starts, and all kept conversations together are held under 1 GB, oldest deleted first.

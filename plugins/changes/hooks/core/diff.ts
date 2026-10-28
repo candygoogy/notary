@@ -28,7 +28,7 @@ export type DiffOptions = {
 
 export type Eol = 'lf' | 'crlf' | 'mixed' | 'none'
 
-const BOM = '﻿'
+const BOM = '\uFEFF'
 // Built at runtime: the catalogue's UI scanner flags control characters in
 // string literals.
 const CR = String.fromCharCode(13)
