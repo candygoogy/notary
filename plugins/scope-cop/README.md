@@ -57,7 +57,7 @@ Scope Cop only tightens. It never turns a refusal from your settings, another ho
 
 Subagents are covered: their edits go through the same checks.
 
-**Approved edits.** When Claude stops at the scope's edge and names the file it would need (*"this also needs `src/api/auth.ts`, which is outside your scope"*) and you go on, an edit to that path in your next turn is approved: in modes A and B it's listed in the pane as *approved*, stays off the band and isn't told to Claude (mode C still blocks it; use **Allow file**). Only paths named with their folder count, and only for that one turn.
+**Approved edits.** When Claude stops at the scope's edge and names the file it would need (*"this also needs `src/api/auth.ts`, which is outside your scope"*) and you go on, an edit to that path in your next turn is approved: in modes A and B it's listed in the pane as *approved*, stays off the band and isn't told to Claude (mode C still blocks it; use **Allow file**). Only paths named with their folder count, and only for the turn your reply starts; a turn that starts without a prompt from you doesn't use them up.
 
 ## The band and the pane
 

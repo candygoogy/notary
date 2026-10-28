@@ -246,6 +246,7 @@ test('B: a shell write to a named file is approved too, and not told on the next
   await start($)
   await scope($, 'src/auth/**')
   await answer($, 't1', ASKS)
+  await prompt($, 'yes')
   await $.turn.start({ text: 'yes', turnId: 't2' })
   w.changes.index = { edits: [shellEdit(2, 'C:/work/src/api/auth.ts')] }
   await answer($, 't2', 'Done.')

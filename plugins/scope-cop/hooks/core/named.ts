@@ -8,8 +8,10 @@ import type { Pattern } from '../shared/glob.ts'
 import { classify, type Ctx, type Mode } from './scope.ts'
 
 // The files one answer named outside the scope, as paths under the root.
-// `turnId`: the turn they hold for, null until the next main-loop turn starts.
-export type Named = { paths: string[]; turnId: string | null }
+// `answered`: the person has sent a prompt since that answer (their yes).
+// `turnId`: the turn they hold for: the first main-loop turn after that
+// prompt; null until it starts.
+export type Named = { paths: string[]; turnId: string | null; answered?: boolean }
 
 // A path token: an optional drive, then names joined by `/` or `\`. It must
 // start a word, so a URL's path is never one. Backticks, quotes, a line
@@ -38,10 +40,18 @@ export function namedOutside(answer: string, cwd: string, ctx: Ctx, patterns: re
   return named
 }
 
-// At a main-loop turn's start: names waiting for a turn hold for this one;
-// names an earlier turn held lapse, so they never outlive the next turn.
+// When the person sends a prompt: names still waiting count as answered.
+export function namedOnPrompt(named: Named | null): Named | null {
+  return named !== null && named.turnId === null ? { ...named, answered: true } : named
+}
+
+// At a main-loop turn's start: answered names hold for this turn; names an
+// earlier turn held lapse, so they never outlive the turn after the yes. A
+// turn that starts without a prompt from the person (a continuation) leaves
+// waiting names waiting.
 export function namedAtTurnStart(named: Named | null, turnId: string): Named | null {
-  return named !== null && named.turnId === null ? { ...named, turnId } : null
+  if (named === null || named.turnId !== null) return null
+  return named.answered === true ? { ...named, turnId } : named
 }
 
 // An edit outside the scope, at `rel` under the root, is approved when the

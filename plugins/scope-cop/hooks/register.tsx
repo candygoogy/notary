@@ -6,7 +6,7 @@ import { compilePatterns, type Pattern } from './shared/glob.ts'
 import { waitingNote } from './shared/pane.ts'
 import { ARGUMENT_HINT, DESCRIPTION, USAGE, parseScopeCommand } from './core/commands.ts'
 import { MODE_TEXT, badPatternsReply, denyReason, scopeChangedReply, scopeClearedReply, scopeLine, scopeSetReply, tellLater, tellNow } from './core/copy.ts'
-import { isApproved, namedAtTurnStart, namedOutside } from './core/named.ts'
+import { isApproved, namedAtTurnStart, namedOnPrompt, namedOutside } from './core/named.ts'
 import { classify, decide, type Ctx, type Mode, type Where } from './core/scope.ts'
 import { shellWrites } from './core/shell.ts'
 import { bandView } from './ui/band.tsx'
@@ -156,6 +156,8 @@ export const register: Register = (on, options) => {
     if (!PROMPT_ORIGINS.includes(e.origin.kind)) return next(e)
     const context: string[] = []
     try {
+      // The person's prompt: files the last answer named count as answered.
+      if (opts.enabled) await update($, NAMED, (named = null) => namedOnPrompt(named))
       const active = await activeScope($, opts)
       if (active !== null) {
         await judgeShellWrites($, opts)

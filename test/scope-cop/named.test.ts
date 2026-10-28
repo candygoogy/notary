@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { isApproved, namedAtTurnStart, namedOutside, type Named } from '../../plugins/scope-cop/hooks/core/named.ts'
+import { isApproved, namedAtTurnStart, namedOnPrompt, namedOutside, type Named } from '../../plugins/scope-cop/hooks/core/named.ts'
 import type { Ctx } from '../../plugins/scope-cop/hooks/core/scope.ts'
 import { compilePatterns } from '../../shared/glob.ts'
 
@@ -59,8 +59,8 @@ test('relative paths are under the session folder, which may be below the root',
 test('names hold only for the next turn, and not in mode C', () => {
   const named: Named = { paths: ['src/api/auth.ts'], turnId: null }
   assert.equal(isApproved(named, 'B', 'src/api/auth.ts', true), false)
-  const next = namedAtTurnStart(named, 't2')
-  assert.deepEqual(next, { paths: ['src/api/auth.ts'], turnId: 't2' })
+  const next = namedAtTurnStart(namedOnPrompt(named), 't2')
+  assert.deepEqual(next, { paths: ['src/api/auth.ts'], turnId: 't2', answered: true })
   assert.equal(isApproved(next, 'B', 'src/api/auth.ts', true), true)
   assert.equal(isApproved(next, 'A', 'SRC/API/auth.ts', true), true)
   assert.equal(isApproved(next, 'A', 'SRC/API/auth.ts', false), false)
@@ -70,4 +70,17 @@ test('names hold only for the next turn, and not in mode C', () => {
   // A turn that ended without a turn.complete leaves them bound: the one after drops them.
   assert.equal(namedAtTurnStart(next, 't3'), null)
   assert.equal(namedAtTurnStart(null, 't3'), null)
+})
+
+test('a turn that starts without a prompt from the person leaves the names waiting for their yes', () => {
+  const named: Named = { paths: ['src/api/auth.ts'], turnId: null }
+  // A continuation turn: no prompt from the person since the answer.
+  const waiting = namedAtTurnStart(named, 't2')
+  assert.deepEqual(waiting, named)
+  assert.equal(isApproved(waiting, 'B', 'src/api/auth.ts', true), false)
+  // The person says yes: the next turn holds them.
+  const held = namedAtTurnStart(namedOnPrompt(waiting), 't3')
+  assert.equal(isApproved(held, 'B', 'src/api/auth.ts', true), true)
+  // A prompt after they are held changes nothing.
+  assert.deepEqual(namedOnPrompt(held), held)
 })
