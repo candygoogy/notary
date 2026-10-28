@@ -1,4 +1,4 @@
-import type { EngineInterface as Engine, MatchedHook, Register } from 'claude-code'
+import type { EngineInterface as Engine, Hook, MatchedHook, Register } from 'claude-code'
 import { update } from 'claude-code'
 
 import { lastSeq, shellEditsSince } from './shared/changes-index.ts'
@@ -94,35 +94,9 @@ export const register: Register = (on, options) => {
   // The guard: a file tool, or (mode C) a shell command with a literal target,
   // outside the scope is denied before it runs. Tighten only, fail open.
   on('tool.check', async ($, e, next) => {
-    const r = await next(e)
-    if (r.decision === 'deny') return r
-    const isEdit = EDIT_TOOLS.includes(e.tool)
-    if (!isEdit && !SHELL_TOOLS.includes(e.tool)) return r
-    const active = await activeScope($, opts)
-    if (active === null || (!isEdit && active.mode !== 'C')) return r
-    const input = (e.input ?? {}) as Record<string, unknown>
-    if (isEdit) {
-      const path = await absolute($, active.session, String(input.file_path ?? input.notebook_path ?? ''))
-      if (path === '') return r
-      const where = classify(path, ctxOf(active.session), active.compiled)
-      if (!decide(active.mode, 'file', where).deny) return r
-      const shown = shownPath(where, path)
-      await flag($, { path: shown, rel: relOf(where), tool: e.tool, via: 'tool', agentId: e.agentId, outcome: 'denied' })
-      return { decision: 'deny', reason: denyReason(shown, active.patterns) }
-    }
-    const writes = shellWrites(String(input.command ?? ''), e.tool === 'PowerShell' ? 'PowerShell' : 'Bash')
-    // Only absolute targets: the shell's own directory can differ from the
-    // session's (a `cd` in an earlier call), so a relative one is not judged
-    // here; Changes still sees what it wrote.
-    for (const target of writes.targets.filter(isAbsolute)) {
-      const path = await realPathOf($, target)
-      const where = classify(path, ctxOf(active.session), active.compiled)
-      if (!decide(active.mode, 'shell-before', where).deny) continue
-      const shown = shownPath(where, path)
-      await flag($, { path: shown, rel: relOf(where), tool: e.tool, via: 'shell', agentId: e.agentId, outcome: 'denied' })
-      return { decision: 'deny', reason: denyReason(shown, active.patterns) }
-    }
-    return r
+    const reason = await denial($, opts, e)
+    if (reason !== null) return { decision: 'deny', reason }
+    return next(e)
   }).catch(($, e, next) => next(e))
 
   // An edit outside the scope that landed: flagged, and in mode B Claude is
@@ -207,7 +181,7 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'scope' }, async ($, e) => {
     try {
-      return await runCommand($, opts, e.args)
+      return { text: await runCommand($, opts, e.args) }
     } catch (error) {
       debug($, 'command', error)
       return { text: 'Scope Cop could not change the scope. Try again; the debug log has the details.' }
@@ -226,27 +200,62 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 }
 
+type CheckEvent = Parameters<Hook<'tool.check'>>[1]
 type BandRender = Parameters<MatchedHook<'ui.render', { component: 'AbovePrompt' }>>
 type PaneRender = Parameters<MatchedHook<'ui.render', { component: 'Pane'; requestId: 'scope' }>>
 
-async function runCommand($: Engine, opts: Options, args: string): Promise<{ text: string }> {
+// Why Scope Cop refuses this call before it runs, or null to pass it on: a
+// file tool, or (mode C) a shell command with a literal absolute target,
+// outside the scope. It only ever refuses; settings and other hooks still
+// answer every call it passes.
+async function denial($: Engine, opts: Options, e: CheckEvent): Promise<string | null> {
+  const isEdit = EDIT_TOOLS.includes(e.tool)
+  if (!isEdit && !SHELL_TOOLS.includes(e.tool)) return null
+  const active = await activeScope($, opts)
+  if (active === null || (!isEdit && active.mode !== 'C')) return null
+  const input = (e.input ?? {}) as Record<string, unknown>
+  if (isEdit) {
+    const path = await absolute($, active.session, String(input.file_path ?? input.notebook_path ?? ''))
+    if (path === '') return null
+    const where = classify(path, ctxOf(active.session), active.compiled)
+    if (!decide(active.mode, 'file', where).deny) return null
+    const shown = shownPath(where, path)
+    await flag($, { path: shown, rel: relOf(where), tool: e.tool, via: 'tool', agentId: e.agentId, outcome: 'denied' })
+    return denyReason(shown, active.patterns)
+  }
+  const writes = shellWrites(String(input.command ?? ''), e.tool === 'PowerShell' ? 'PowerShell' : 'Bash')
+  // Only absolute targets: the shell's own directory can differ from the
+  // session's (a `cd` in an earlier call), so a relative one is not judged
+  // here; Changes still sees what it wrote.
+  for (const target of writes.targets.filter(isAbsolute)) {
+    const path = await realPathOf($, target)
+    const where = classify(path, ctxOf(active.session), active.compiled)
+    if (!decide(active.mode, 'shell-before', where).deny) continue
+    const shown = shownPath(where, path)
+    await flag($, { path: shown, rel: relOf(where), tool: e.tool, via: 'shell', agentId: e.agentId, outcome: 'denied' })
+    return denyReason(shown, active.patterns)
+  }
+  return null
+}
+
+async function runCommand($: Engine, opts: Options, args: string): Promise<string> {
   const command = parseScopeCommand(args)
-  if (command.kind === 'error') return { text: `${command.message}\n${USAGE}` }
-  if (!opts.enabled) return { text: 'Scope Cop is turned off. Turn it on in /config.' }
-  if (command.kind === 'show') return { text: (await openPane($)) ?? 'Scope pane opened.' }
+  if (command.kind === 'error') return `${command.message}\n${USAGE}`
+  if (!opts.enabled) return 'Scope Cop is turned off. Turn it on in /config.'
+  if (command.kind === 'show') return (await openPane($)) ?? 'Scope pane opened.'
   if (command.kind === 'mode') {
     // Holds for this conversation. It never writes /config: the plugin
     // directory can't read a settings write, and /config keeps the lasting mode.
     await $.state.set(MODE, command.mode)
     $.ui.invalidate('ui.render')
-    return { text: `Scope Cop mode ${MODE_TEXT[command.mode]}. This holds for this conversation; to keep it, change it in /config.` }
+    return `Scope Cop mode ${MODE_TEXT[command.mode]}. This holds for this conversation; to keep it, change it in /config.`
   }
   if (command.kind === 'off') {
     await $.state.set(SCOPE, null)
     await $.state.set(NAMED, null)
     await $.state.set(OUTSIDE, [])
     $.ui.invalidate('ui.render')
-    return { text: scopeClearedReply() }
+    return scopeClearedReply()
   }
   const { value: session = null } = await $.state.get(SESSION)
   const isWindows = session?.isWindows ?? false
@@ -256,18 +265,18 @@ async function runCommand($: Engine, opts: Options, args: string): Promise<{ tex
   let next: string[]
   if (command.kind === 'remove') {
     const missing = wanted.filter(p => !before.includes(p))
-    if (missing.length > 0) return { text: `Not in the scope: ${missing.join(', ')}. The scope is ${before.length === 0 ? 'not set' : before.join(', ')}.` }
+    if (missing.length > 0) return `Not in the scope: ${missing.join(', ')}. The scope is ${before.length === 0 ? 'not set' : before.join(', ')}.`
     next = before.filter(p => !wanted.includes(p))
   } else {
     const compiled = compilePatterns(wanted, isWindows)
-    if ('errors' in compiled) return { text: badPatternsReply(compiled.errors) }
+    if ('errors' in compiled) return badPatternsReply(compiled.errors)
     next = command.kind === 'add' ? [...before, ...wanted.filter(p => !before.includes(p))] : [...new Set(wanted)]
   }
   if (next.length === 0) {
     await $.state.set(SCOPE, null)
     await $.state.set(NAMED, null)
     $.ui.invalidate('ui.render')
-    return { text: scopeClearedReply() }
+    return scopeClearedReply()
   }
   // Shell writes made before this scope are not judged against it.
   if (current === null) await $.state.set(SHELL_SEEN, lastSeq(await changesIndex($)))
@@ -275,7 +284,7 @@ async function runCommand($: Engine, opts: Options, args: string): Promise<{ tex
   // Names were judged against the old scope.
   await $.state.set(NAMED, null)
   $.ui.invalidate('ui.render')
-  return { text: command.kind === 'set' ? scopeSetReply(next) : scopeChangedReply(next) }
+  return command.kind === 'set' ? scopeSetReply(next) : scopeChangedReply(next)
 }
 
 // The scope and the session, when Scope Cop is on and a scope is set.

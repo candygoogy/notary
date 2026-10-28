@@ -53,6 +53,8 @@ What Claude is told states facts and names the mod: *"Scope Cop (a mod the user 
 
 Scope Cop only tightens. It never turns a refusal from your settings, another hook or the permission mode into an allow, and if Scope Cop itself fails, the edit goes ahead as if it weren't installed.
 
+**The permission check.** Scope Cop's permission hook runs before each `Edit`, `Write`, `NotebookEdit`, `Bash` and `PowerShell` call while a scope is set. In mode C it refuses an edit whose file is outside the scope, and a shell command whose literal absolute write target is; every other call, and every call in modes A and B, it passes on unchanged to your settings and other hooks.
+
 Subagents are covered: their edits go through the same checks.
 
 **Approved edits.** When Claude stops at the scope's edge and names the file it would need (*"this also needs `src/api/auth.ts`, which is outside your scope"*) and you go on, an edit to that path in your next turn is approved: in modes A and B it's listed in the pane as *approved*, stays off the band and isn't told to Claude (mode C still blocks it; use **Allow file**). Only paths named with their folder count, and only for that one turn.
