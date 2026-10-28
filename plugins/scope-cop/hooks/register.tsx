@@ -1,4 +1,4 @@
-import type { EngineInterface as Engine, Hook, MatchedHook, Register } from 'claude-code'
+import type { EngineInterface as Engine, Register } from 'claude-code'
 import { update } from 'claude-code'
 
 import { lastSeq, shellEditsSince } from './shared/changes-index.ts'
@@ -94,8 +94,11 @@ export const register: Register = (on, options) => {
   // The guard: a file tool, or (mode C) a shell command with a literal target,
   // outside the scope is denied before it runs. Tighten only, fail open.
   on('tool.check', async ($, e, next) => {
-    const reason = await denial($, opts, e)
-    if (reason !== null) return { decision: 'deny', reason }
+    const tool = e.tool
+    const input = e.input
+    const agentId = e.agentId
+    const refusal = await denial($, opts, tool, input, agentId)
+    if (refusal !== null) return { decision: 'deny', reason: refusal }
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -181,16 +184,47 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'scope' }, async ($, e) => {
     try {
-      return { text: await runCommand($, opts, e.args) }
+      const args = e.args
+      return { text: await runCommand($, opts, args) }
     } catch (error) {
       debug($, 'command', error)
       return { text: 'Scope Cop could not change the scope. Try again; the debug log has the details.' }
     }
   })
 
-  on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => (opts.enabled ? renderBand($, opts, e, next) : next(e)))
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (!opts.enabled || e.props.hasSurvey) return next(e)
+    const active = await activeScope($, opts)
+    if (active === null) return next(e)
+    const { value: outside = [] } = await $.state.get(OUTSIDE)
+    const newest = [...outside].reverse().find(f => f.rel !== null) ?? null
+    const elements = $.ui.resolve(e)
+    const paneUp = await paneIsUp($)
+    const mine = bandView(elements, active.patterns, outside, {
+      onAllow: newest === null || newest.rel === null ? null : () => void allowFile($, newest.rel!),
+      onDetails: paneUp ? null : () => void openDetails($),
+      onDismiss: () => void dismissOutside($),
+      onClear: () => void clearScope($),
+    })
+    if (e.props.maxRows < 2) return mine
+    const { Box } = elements
+    const below = await next(e)
+    return (
+      <Box key="scope-cop-above-prompt" flexDirection="column">
+        {mine}
+        {below}
+      </Box>
+    )
+  })
 
-  on('ui.render', { component: 'Pane', requestId: 'scope' }, ($, e, next) => (opts.enabled ? renderPane($, opts, e, next) : next(e)))
+  on('ui.render', { component: 'Pane', requestId: 'scope' }, async ($, e, next) => {
+    if (!opts.enabled) return next(e)
+    const { value: scope = null } = await $.state.get(SCOPE)
+    const { value: log = [] } = await $.state.get(LOG)
+    const { value: mode = null } = await $.state.get(MODE)
+    const now = await $.clock.now()
+    return paneView($.ui.resolve(e), scope?.patterns ?? null, mode ?? opts.mode, log, now, pattern => void removePattern($, pattern))
+  })
 
   // The band's [Details] shows only while the pane is shut.
   on('ui.close', { id: 'scope' }, async ($, e, next) => {
@@ -200,30 +234,26 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next(e))
 }
 
-type CheckEvent = Parameters<Hook<'tool.check'>>[1]
-type BandRender = Parameters<MatchedHook<'ui.render', { component: 'AbovePrompt' }>>
-type PaneRender = Parameters<MatchedHook<'ui.render', { component: 'Pane'; requestId: 'scope' }>>
-
 // Why Scope Cop refuses this call before it runs, or null to pass it on: a
 // file tool, or (mode C) a shell command with a literal absolute target,
 // outside the scope. It only ever refuses; settings and other hooks still
 // answer every call it passes.
-async function denial($: Engine, opts: Options, e: CheckEvent): Promise<string | null> {
-  const isEdit = EDIT_TOOLS.includes(e.tool)
-  if (!isEdit && !SHELL_TOOLS.includes(e.tool)) return null
+async function denial($: Engine, opts: Options, tool: string, toolInput: unknown, agentId: string | undefined): Promise<string | null> {
+  const isEdit = EDIT_TOOLS.includes(tool)
+  if (!isEdit && !SHELL_TOOLS.includes(tool)) return null
   const active = await activeScope($, opts)
   if (active === null || (!isEdit && active.mode !== 'C')) return null
-  const input = (e.input ?? {}) as Record<string, unknown>
+  const input = (toolInput ?? {}) as Record<string, unknown>
   if (isEdit) {
     const path = await absolute($, active.session, String(input.file_path ?? input.notebook_path ?? ''))
     if (path === '') return null
     const where = classify(path, ctxOf(active.session), active.compiled)
     if (!decide(active.mode, 'file', where).deny) return null
     const shown = shownPath(where, path)
-    await flag($, { path: shown, rel: relOf(where), tool: e.tool, via: 'tool', agentId: e.agentId, outcome: 'denied' })
+    await flag($, { path: shown, rel: relOf(where), tool: tool, via: 'tool', agentId: agentId, outcome: 'denied' })
     return denyReason(shown, active.patterns)
   }
-  const writes = shellWrites(String(input.command ?? ''), e.tool === 'PowerShell' ? 'PowerShell' : 'Bash')
+  const writes = shellWrites(String(input.command ?? ''), tool === 'PowerShell' ? 'PowerShell' : 'Bash')
   // Only absolute targets: the shell's own directory can differ from the
   // session's (a `cd` in an earlier call), so a relative one is not judged
   // here; Changes still sees what it wrote.
@@ -232,7 +262,7 @@ async function denial($: Engine, opts: Options, e: CheckEvent): Promise<string |
     const where = classify(path, ctxOf(active.session), active.compiled)
     if (!decide(active.mode, 'shell-before', where).deny) continue
     const shown = shownPath(where, path)
-    await flag($, { path: shown, rel: relOf(where), tool: e.tool, via: 'shell', agentId: e.agentId, outcome: 'denied' })
+    await flag($, { path: shown, rel: relOf(where), tool: tool, via: 'shell', agentId: agentId, outcome: 'denied' })
     return denyReason(shown, active.patterns)
   }
   return null
@@ -374,39 +404,6 @@ async function firstTell($: Engine, path: string): Promise<boolean> {
     return [...told, key].slice(-TOLD_LIMIT)
   })
   return first
-}
-
-// The band: one row while a scope is set, then whatever is beneath it.
-async function renderBand($: Engine, opts: Options, e: BandRender[1], next: BandRender[2]) {
-  if (e.component !== 'AbovePrompt' || e.props.hasSurvey) return next(e)
-  const active = await activeScope($, opts)
-  if (active === null) return next(e)
-  const { value: outside = [] } = await $.state.get(OUTSIDE)
-  const newest = [...outside].reverse().find(f => f.rel !== null) ?? null
-  const elements = $.ui.resolve(e)
-  const mine = bandView(elements, active.patterns, outside, {
-    onAllow: newest === null || newest.rel === null ? null : () => void allowFile($, newest.rel!),
-    onDetails: (await paneIsUp($)) ? null : () => void openDetails($),
-    onDismiss: () => void dismissOutside($),
-    onClear: () => void clearScope($),
-  })
-  if (e.props.maxRows < 2) return mine
-  const { Box } = elements
-  const below = await next(e)
-  return (
-    <Box key="scope-cop-above-prompt" flexDirection="column">
-      {mine}
-      {below}
-    </Box>
-  )
-}
-
-async function renderPane($: Engine, opts: Options, e: PaneRender[1], next: PaneRender[2]) {
-  if (e.component !== 'Pane' || e.requestId !== PANE.id) return next(e)
-  const { value: scope = null } = await $.state.get(SCOPE)
-  const { value: log = [] } = await $.state.get(LOG)
-  const { value: mode = null } = await $.state.get(MODE)
-  return paneView($.ui.resolve(e), scope?.patterns ?? null, mode ?? opts.mode, log, await $.clock.now(), pattern => void removePattern($, pattern))
 }
 
 // [Allow file]: the file joins the scope, and leaves the band's list.
