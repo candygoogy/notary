@@ -97,10 +97,15 @@ export const register: Register = (on, options) => {
     const tool = e.tool
     const input = e.input
     const agentId = e.agentId
-    const refusal = await denial($, opts, tool, input, agentId)
+    let refusal: string | null = null
+    try {
+      refusal = await denial($, opts, tool, input, agentId)
+    } catch (error) {
+      debug($, 'tool.check', error)
+    }
     if (refusal !== null) return { decision: 'deny', reason: refusal }
     return next(e)
-  }).catch(($, e, next) => next(e))
+  })
 
   // An edit outside the scope that landed: flagged, and in mode B Claude is
   // told on the call's own result, once per file per turn. A file the last
