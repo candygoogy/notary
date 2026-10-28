@@ -144,7 +144,7 @@ Getting there took work. Earlier versions flagged 355 turns on the same sessions
 
 ### Settings
 
-Change them in the `/config` menu, or with the command:
+Change them in the `/config` menu, or with the command, which changes them for the current conversation only:
 
 | Setting | Command | Default |
 |---|---|---|

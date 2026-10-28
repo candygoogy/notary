@@ -422,11 +422,11 @@ test('without the setting, the same run backs nothing', async ($, on) => {
 })
 
 const run = ($: Engine, args: string) => $.command.run({ command: 'receipts', args, origin: composer, presentation: {} as never })
-const UNSAVED = ' This holds for this conversation; the setting could not be saved here (change it in /config).'
+const HOLDS = ' This holds for this conversation; to keep it, change it in /config.'
 
-test('/receipts mode A where the setting has no row (a headless session): it holds for the conversation, and says so', async ($, on) => {
+test('/receipts mode A holds for the conversation, and says so', async ($, on) => {
   const w = world(on, { configRows: false, expectLogs: true })
-  expect((await run($, 'mode A')).text).toBe(`Receipts mode is now A.${UNSAVED}`)
+  expect((await run($, 'mode A')).text).toBe(`Receipts mode is now A.${HOLDS}`)
   await $.turn.start({ text: 'fix it', turnId: 't1' })
   w.answers.push(landed, failing)
   await $.tool.call(edit)
@@ -435,9 +435,9 @@ test('/receipts mode A where the setting has no row (a headless session): it hol
   expect(w.stamps()).toEqual([stampText(contradicted)])
 })
 
-test('/receipts off where the setting has no row: Receipts stands down for the conversation', async ($, on) => {
+test('/receipts off: Receipts stands down for the conversation', async ($, on) => {
   const w = world(on, { configRows: false, expectLogs: true })
-  expect((await run($, 'off')).text).toBe(`Receipts is now off.${UNSAVED}`)
+  expect((await run($, 'off')).text).toBe(`Receipts is now off.${HOLDS}`)
   await $.turn.start({ text: 'fix it', turnId: 't1' })
   w.answers.push(landed, failing)
   await $.tool.call(edit)

@@ -76,7 +76,7 @@ A mod sees a shell command's text before it runs, and nothing about what the pro
 
 | Setting | Command | Default |
 |---|---|---|
-| Mode | `/scope mode A`, `B` or `C` (holds at once for the conversation, and is saved as the setting when the session has its `/config` row) | B |
+| Mode | `/scope mode A`, `B` or `C` for this conversation; `/config` to keep it | B |
 | On or off | `/config` | on |
 
 ## Privacy

@@ -235,12 +235,11 @@ async function runCommand($: Engine, opts: Options, args: string): Promise<{ tex
   if (!opts.enabled) return { text: 'Scope Cop is turned off. Turn it on in /config.' }
   if (command.kind === 'show') return { text: (await openPane($)) ?? 'Scope pane opened.' }
   if (command.kind === 'mode') {
-    // Holds for this conversation at once; saved as the setting where the
-    // session has the row (a headless session has no plugin rows).
+    // Holds for this conversation. It never writes /config: the plugin
+    // directory can't read a settings write, and /config keeps the lasting mode.
     await $.state.set(MODE, command.mode)
     $.ui.invalidate('ui.render')
-    const saved = await saveMode($, command.mode)
-    return { text: `Scope Cop mode ${MODE_TEXT[command.mode]}.${saved ? '' : ' This holds for this conversation; the setting could not be saved here (change it in /config).'}` }
+    return { text: `Scope Cop mode ${MODE_TEXT[command.mode]}. This holds for this conversation; to keep it, change it in /config.` }
   }
   if (command.kind === 'off') {
     await $.state.set(SCOPE, null)
@@ -277,16 +276,6 @@ async function runCommand($: Engine, opts: Options, args: string): Promise<{ tex
   await $.state.set(NAMED, null)
   $.ui.invalidate('ui.render')
   return { text: command.kind === 'set' ? scopeSetReply(next) : scopeChangedReply(next) }
-}
-
-async function saveMode($: Engine, mode: Mode): Promise<boolean> {
-  try {
-    const result = await $.config.set({ key: 'scope-cop.mode', value: mode })
-    return !('deny' in result && result.deny !== undefined)
-  } catch (error) {
-    debug($, 'mode', error)
-    return false
-  }
 }
 
 // The scope and the session, when Scope Cop is on and a scope is set.

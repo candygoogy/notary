@@ -203,24 +203,22 @@ test('/receipts opens the pane', async ($, on) => {
   expect(result.text).toBe('Receipts pane opened.')
 })
 
-test('/receipts mode C writes the setting; a bad argument answers the usage', async ($, on) => {
+const HOLDS = ' This holds for this conversation; to keep it, change it in /config.'
+
+test('/receipts mode C holds for the conversation and writes no setting; a bad argument answers the usage', async ($, on) => {
   const s = screen(on)
   const ok = await $.command.run({ command: 'receipts', args: 'mode C', origin: composer, presentation: {} as never })
-  expect(s.settings).toEqual([{ key: 'receipts.mode', value: 'C' }])
-  expect(ok.text).toBe('Receipts mode is now C.')
+  expect(ok.text).toBe(`Receipts mode is now C.${HOLDS}`)
   const bad = await $.command.run({ command: 'receipts', args: 'mode Z', origin: composer, presentation: {} as never })
   expect(bad.text).toBe(USAGE)
-  expect(s.settings).toHaveLength(1)
+  expect(s.settings).toEqual([])
 })
 
-test('/receipts off and smart on write their settings', async ($, on) => {
+test('/receipts off and smart on write no settings', async ($, on) => {
   const s = screen(on)
   await $.command.run({ command: 'receipts', args: 'off', origin: composer, presentation: {} as never })
   await $.command.run({ command: 'receipts', args: 'smart on', origin: composer, presentation: {} as never })
-  expect(s.settings).toEqual([
-    { key: 'receipts.enabled', value: false },
-    { key: 'receipts.smartCheck', value: true },
-  ])
+  expect(s.settings).toEqual([])
 })
 
 // Review 6: off draws nothing.
@@ -235,11 +233,11 @@ for (const surface of SURFACES) {
   })
 }
 
-test('/receipts verbosity all writes the setting; a bad value answers the usage', async ($, on) => {
+test('/receipts verbosity all holds for the conversation; a bad value answers the usage', async ($, on) => {
   const s = screen(on)
   const ok = await $.command.run({ command: 'receipts', args: 'verbosity all', origin: composer, presentation: {} as never })
-  expect(s.settings).toEqual([{ key: 'receipts.verbosity', value: 'all' }])
-  expect(ok.text).toBe('Receipts verbosity is now all.')
+  expect(s.settings).toEqual([])
+  expect(ok.text).toBe(`Receipts verbosity is now all.${HOLDS}`)
   const bad = await $.command.run({ command: 'receipts', args: 'verbosity loud', origin: composer, presentation: {} as never })
   expect(bad.text).toBe(USAGE)
 })
@@ -296,14 +294,14 @@ test('with room for one row only, Receipts draws its own row', { options: { mode
 
 const run = ($: Engine, args: string) => $.command.run({ command: 'receipts', args, origin: composer, presentation: {} as never })
 
-test('/receipts check add, list and remove write the checks setting', { options: { checks: ['build: make ci'] } }, async ($, on) => {
+test('/receipts check add, list and remove change the checks for the conversation', { options: { checks: ['build: make ci'] } }, async ($, on) => {
   const s = screen(on)
   expect((await run($, 'checks')).text).toBe('Receipts checks:\n  build: make ci')
-  expect((await run($, 'check add "pnpm verify" tests')).text).toBe('Receipts now counts pnpm verify as a test check.')
-  expect(s.settings).toEqual([{ key: 'receipts.checks', value: ['build: make ci', 'tests: pnpm verify'] }])
-  expect((await run($, 'check remove make ci')).text).toBe('Receipts no longer counts make ci as a check.')
-  // The remove sees the add before it: the change holds for the conversation.
-  expect(s.settings.at(-1)).toEqual({ key: 'receipts.checks', value: ['tests: pnpm verify'] })
+  expect((await run($, 'check add "pnpm verify" tests')).text).toBe(`Receipts now counts pnpm verify as a test check.${HOLDS}`)
+  expect((await run($, 'checks')).text).toBe('Receipts checks:\n  build: make ci\n  tests: pnpm verify')
+  expect((await run($, 'check remove make ci')).text).toBe(`Receipts no longer counts make ci as a check.${HOLDS}`)
+  expect((await run($, 'checks')).text).toBe('Receipts checks:\n  tests: pnpm verify')
+  expect(s.settings).toEqual([])
   expect((await run($, 'check remove nope')).text).toBe('No check named nope.')
   expect((await run($, 'check add pnpm verify')).text).toBe(USAGE)
 })

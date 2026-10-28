@@ -254,9 +254,12 @@ export const register: Register = (on, options) => {
 type BandRender = Parameters<MatchedHook<'ui.render', { component: 'AbovePrompt' }>>
 type PaneRender = Parameters<MatchedHook<'ui.render', { component: 'Pane'; requestId: 'receipts' }>>
 
-// `/receipts` opens the pane; its subcommands change the plugin's settings.
-// A change holds for this conversation at once, and is saved as the setting
-// where the session has the row (a headless session has no plugin rows).
+// `/receipts` opens the pane; its subcommands change the plugin's settings for
+// this conversation. They never write /config: the plugin directory can't
+// read a settings write it can't see the key of, and /config keeps the
+// lasting setting.
+const FOR_THIS_CONVERSATION = ' This holds for this conversation; to keep it, change it in /config.'
+
 async function runCommand($: Engine, opts: Options, args: string): Promise<{ text: string }> {
   const plan = parseCommand(args)
   if (plan.kind === 'usage') return { text: USAGE }
@@ -268,10 +271,10 @@ async function runCommand($: Engine, opts: Options, args: string): Promise<{ tex
     const edit = editChecks((await optionsOf($, opts)).checks, plan)
     if (edit.value === undefined) return { text: edit.text }
     await override($, { checks: parseChecks(edit.value).checks })
-    return { text: edit.text + (await saveSetting($, 'receipts.checks', edit.value)) }
+    return { text: edit.text + FOR_THIS_CONVERSATION }
   }
   await override($, { [plan.key.slice('receipts.'.length)]: plan.value } as Overrides)
-  return { text: plan.done + (await saveSetting($, plan.key, plan.value)) }
+  return { text: plan.done + FOR_THIS_CONVERSATION }
 }
 
 async function override($: Engine, change: Overrides): Promise<void> {
@@ -279,18 +282,6 @@ async function override($: Engine, change: Overrides): Promise<void> {
   $.ui.invalidate('ui.render')
 }
 
-// Best effort: what to add to the command's answer when the setting was not
-// saved (no row for it, or a hook refused). Never throws.
-async function saveSetting($: Engine, key: string, value: string | boolean | string[]): Promise<string> {
-  const unsaved = ' This holds for this conversation; the setting could not be saved here (change it in /config).'
-  try {
-    const result = await $.config.set({ key, value })
-    return 'deny' in result && result.deny !== undefined ? unsaved : ''
-  } catch (error) {
-    debug($, 'command', error)
-    return unsaved
-  }
-}
 
 // The band, for as long as bandStays (core/visibility.ts) keeps it, or [Dismiss].
 // It shares the space above the prompt: Receipts' row goes first and whatever

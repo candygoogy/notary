@@ -163,6 +163,8 @@ Pester only sets an exit code with `-CI`, so its summary is always read.
 | `stamp` | on or off | on | `/config` |
 | `checks` | your own check commands, each `tests: <command>` or `build: <command>` | none | `/receipts check add <command> tests\|build`, `/receipts check remove <command>`, `/receipts checks` |
 
+A `/receipts` command changes a setting for the current conversation only. To keep a setting for every session, change it in `/config`.
+
 `/receipts` with no arguments opens the pane. If the window is too narrow for it, the pane waits, and `/receipts` or the band's **Details** says so and why, once.
 
 ## Sending back and nudging

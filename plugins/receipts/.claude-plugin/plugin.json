@@ -1,6 +1,6 @@
 {
   "name": "receipts",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Claude says the tests pass. Receipts checks. Flags success claims that no check backs up.",
   "author": { "name": "Notary contributors" },
   "license": "MIT",

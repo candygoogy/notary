@@ -46,24 +46,16 @@ test('/scope add, remove and off', async ($, on) => {
   expect(await prompt($)).toEqual([])
 })
 
-test('/scope mode holds at once and is saved as the setting; a typo gets the usage', async ($, on) => {
+test('/scope mode holds at once for the conversation and writes no setting; a typo gets the usage', async ($, on) => {
   const w = world(on)
   await start($)
   await scope($, 'src/auth/**')
-  expect(await scope($, 'mode c')).toBe('Scope Cop mode C: edits outside the scope are blocked, and Claude is told why.')
-  expect(w.settings).toEqual([{ key: 'scope-cop.mode', value: 'C' }])
+  expect(await scope($, 'mode c')).toBe(
+    'Scope Cop mode C: edits outside the scope are blocked, and Claude is told why. This holds for this conversation; to keep it, change it in /config.',
+  )
+  expect(w.settings).toEqual([])
   expect((await $.tool.check(checkOf(OUT))).decision).toBe('deny')
   expect(await scope($, 'mode X')).toContain('Usage: /scope')
-})
-
-test('/scope mode where the setting has no row (a headless session): it holds for the conversation, and says so', async ($, on) => {
-  world(on, { configRows: false, expectLogs: true })
-  await start($)
-  await scope($, 'src/auth/**')
-  expect(await scope($, 'mode C')).toBe(
-    'Scope Cop mode C: edits outside the scope are blocked, and Claude is told why. This holds for this conversation; the setting could not be saved here (change it in /config).',
-  )
-  expect((await $.tool.check(checkOf(OUT))).decision).toBe('deny')
 })
 
 test('/scope alone opens the pane', async ($, on) => {
