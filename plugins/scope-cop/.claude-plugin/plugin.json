@@ -1,7 +1,7 @@
 {
   "name": "scope-cop",
   "version": "0.1.0",
-  "description": "Say which files a task may touch. Scope Cop flags Claude's edits outside that scope, tells Claude, or blocks them if you want.",
+  "description": "Claude stays inside the scope you set, and asks before leaving it. Edits outside it are flagged, or blocked if you want.",
   "author": { "name": "Notary contributors" },
   "license": "MIT",
   "homepage": "https://github.com/candygoogy/notary/tree/main/plugins/scope-cop",
